@@ -1,6 +1,5 @@
 import { createClient } from '@/src/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { INSPIRATIONS } from '@/src/data/inspirations'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,6 +15,7 @@ function toRow(item: Record<string, unknown>, userId: string) {
     notes: item.notes ?? '',
     analysis: item.analysis ?? {},
     saved_at: item.savedAt ?? item.saved_at ?? new Date().toISOString(),
+    folder_id: item.folderId ?? item.folder_id ?? null,
   }
 }
 
@@ -31,6 +31,7 @@ export function fromRow(row: Record<string, unknown>) {
     notes: row.notes,
     analysis: row.analysis,
     savedAt: row.saved_at,
+    folderId: row.folder_id ?? null,
   }
 }
 
@@ -49,17 +50,6 @@ export async function GET() {
     .order('saved_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Seed 38 demo inspirations for brand-new users
-  if (data.length === 0) {
-    const seedRows = INSPIRATIONS.map((item) => toRow(item as Record<string, unknown>, user.id))
-    const { data: seeded, error: seedErr } = await supabase
-      .from('inspirations')
-      .insert(seedRows)
-      .select()
-    if (seedErr) return NextResponse.json({ error: seedErr.message }, { status: 500 })
-    return NextResponse.json(seeded.map(fromRow))
-  }
 
   return NextResponse.json(data.map(fromRow))
 }

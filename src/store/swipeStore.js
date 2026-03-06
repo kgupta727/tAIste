@@ -10,6 +10,7 @@ export const useSwipeStore = create(
       searchQuery: '',
       sortBy: 'date',
       viewMode: 'grid',
+      selectedFolderId: null, // null = "All"
 
       toggleTag: (tag) =>
         set((state) => ({
@@ -22,6 +23,7 @@ export const useSwipeStore = create(
       setSearch: (query) => set({ searchQuery: query }),
       setSortBy: (sortBy) => set({ sortBy }),
       setViewMode: (viewMode) => set({ viewMode }),
+      setSelectedFolder: (folderId) => set({ selectedFolderId: folderId }),
     }),
     {
       name: 'tastestack-swipe',

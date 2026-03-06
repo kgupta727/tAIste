@@ -1,11 +1,10 @@
 import { createClient } from '@/src/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { fromRow } from '../route'
+import { fromFolderRow } from '../route'
 
 type Params = { params: Promise<{ id: string }> }
 
-// ── PATCH /api/inspirations/[id] ─────────────────────────────────────────────
-// Updates notes and/or tags on a single inspiration.
+// ── PATCH /api/folders/[id] ───────────────────────────────────────────────────
 
 export async function PATCH(request: Request, { params }: Params) {
   const supabase = await createClient()
@@ -15,15 +14,12 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params
   const body = await request.json()
 
-  // Only allow updating safe fields
   const updates: Record<string, unknown> = {}
-  if (body.notes !== undefined) updates.notes = body.notes
-  if (body.tags !== undefined) updates.tags = body.tags
-  if (body.title !== undefined) updates.title = body.title
-  if ('folderId' in body) updates.folder_id = body.folderId ?? null
+  if (body.name !== undefined) updates.name = body.name
+  if (body.color !== undefined) updates.color = body.color
 
   const { data, error } = await supabase
-    .from('inspirations')
+    .from('folders')
     .update(updates)
     .eq('id', id)
     .eq('user_id', user.id)
@@ -31,10 +27,11 @@ export async function PATCH(request: Request, { params }: Params) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(fromRow(data))
+  return NextResponse.json(fromFolderRow(data))
 }
 
-// ── DELETE /api/inspirations/[id] ────────────────────────────────────────────
+// ── DELETE /api/folders/[id] ──────────────────────────────────────────────────
+// Deletes the folder. Inspirations inside have their folder_id set to NULL (on delete set null in DB).
 
 export async function DELETE(_: Request, { params }: Params) {
   const supabase = await createClient()
@@ -44,7 +41,7 @@ export async function DELETE(_: Request, { params }: Params) {
   const { id } = await params
 
   const { error } = await supabase
-    .from('inspirations')
+    .from('folders')
     .delete()
     .eq('id', id)
     .eq('user_id', user.id)

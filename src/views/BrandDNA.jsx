@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
-import { Dna, Sparkles, Palette, Type, Eye, Clock, Target, Loader2, AlertCircle } from 'lucide-react'
+import { Dna, Sparkles, Palette, Type, Eye, Clock, Target, Loader2, AlertCircle, Plus, Trash2, Check, Pencil } from 'lucide-react'
 import AnimatedCounter from '../components/common/AnimatedCounter'
 import { useBrandDNA } from '../hooks/useBrandDNA'
 
@@ -96,16 +96,70 @@ function TypographyConfBar({ style, index }) {
 }
 
 export default function BrandDNA() {
-  const { brandDNA, isLoading, isReanalyzing, reanalyzeBrandDNA } = useBrandDNA()
-  const [reanalyzeError, setReanalyzeError] = useState(null)
+  const { brandDNAs, activeBrandDNA, isLoading, isReanalyzing, reanalyzeBrandDNA, setActive, deleteDNA, renameDNA } = useBrandDNA()
+  const [error, setError] = useState(null)
+  const [generating, setGenerating] = useState(false)
+  const [newDNAName, setNewDNAName] = useState('')
+  const [showNameInput, setShowNameInput] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editingName, setEditingName] = useState('')
+  // Which DNA is currently displayed in the UI (tab selection)
+  const [viewingId, setViewingId] = useState(null)
 
-  const handleReanalyze = async () => {
-    setReanalyzeError(null)
-    const result = await reanalyzeBrandDNA()
-    if (result?.error) setReanalyzeError(result.error)
+  const viewingRecord = viewingId
+    ? brandDNAs.find((d) => d.id === viewingId) ?? activeBrandDNA
+    : activeBrandDNA
+
+  const brandDNA = viewingRecord?.data ?? null
+
+  const handleGenerate = async () => {
+    setError(null)
+    const name = newDNAName.trim() || `DNA #${brandDNAs.length + 1}`
+    setGenerating(true)
+    const result = await reanalyzeBrandDNA(name)
+    setGenerating(false)
+    setShowNameInput(false)
+    setNewDNAName('')
+    if (result?.error) setError(result.error)
+    else if (result?.id) setViewingId(result.id)
   }
 
-  if (isLoading || !brandDNA) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // Empty state — no DNAs yet
+  if (brandDNAs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-6 text-center px-8">
+        <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+          <Dna size={32} className="text-accent" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-[#FAFAFA]">No Brand DNA yet</h2>
+          <p className="text-[#A1A1AA] text-sm mt-2 max-w-sm mx-auto">Save some inspirations first, then generate your first Brand DNA profile.</p>
+        </div>
+        {error && (
+          <div className="flex items-center gap-2 text-amber-400 text-sm bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3">
+            <AlertCircle size={16} />{error}
+          </div>
+        )}
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-60"
+        >
+          {generating ? <><Loader2 size={16} className="animate-spin" /> Analyzing...</> : <><Sparkles size={16} /> Generate Brand DNA</>}
+        </button>
+      </div>
+    )
+  }
+
+  if (!brandDNA) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
@@ -120,34 +174,128 @@ export default function BrandDNA() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="px-8 py-8 max-w-6xl mx-auto space-y-10"
+      className="px-8 py-8 max-w-6xl mx-auto space-y-8"
     >
+      {/* DNA Tabs row */}
+      <motion.div variants={itemVariants} className="flex items-center gap-2 flex-wrap">
+        {brandDNAs.map((record) => {
+          const isViewing = (viewingId ?? activeBrandDNA?.id) === record.id
+          return (
+            <div key={record.id} className="relative group/tab flex items-center">
+              {editingId === record.id ? (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault()
+                    await renameDNA(record.id, editingName)
+                    setEditingId(null)
+                  }}
+                  className="flex items-center gap-1"
+                >
+                  <input
+                    autoFocus
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Escape' && setEditingId(null)}
+                    className="bg-[#27272A] border border-[#A78BFA]/50 rounded-lg px-2 py-1 text-sm text-[#FAFAFA] focus:outline-none w-32"
+                  />
+                  <button type="submit" className="text-accent hover:text-accent-hover p-1"><Check size={13} /></button>
+                </form>
+              ) : (
+                <button
+                  onClick={() => { setViewingId(record.id) }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium transition-all border ${
+                    isViewing
+                      ? 'bg-[#27272A] border-[#A78BFA]/50 text-[#FAFAFA]'
+                      : 'bg-transparent border-[#3F3F46] text-[#A1A1AA] hover:text-[#FAFAFA] hover:border-[#52525B]'
+                  }`}
+                >
+                  <Dna size={13} style={{ color: isViewing ? '#A78BFA' : undefined }} />
+                  {record.name}
+                  {record.isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#34D399] flex-shrink-0" title="Active" />}
+                </button>
+              )}
+              {/* Tab actions on hover */}
+              {editingId !== record.id && (
+                <div className="absolute -top-2 -right-1 opacity-0 group-hover/tab:opacity-100 flex gap-0.5 transition-all">
+                  <button
+                    onClick={() => { setEditingId(record.id); setEditingName(record.name) }}
+                    className="p-0.5 bg-[#27272A] border border-[#3F3F46] rounded text-[#52525B] hover:text-accent"
+                    title="Rename"
+                  >
+                    <Pencil size={9} />
+                  </button>
+                  {!record.isActive && (
+                    <button
+                      onClick={() => setActive(record.id)}
+                      className="p-0.5 bg-[#27272A] border border-[#3F3F46] rounded text-[#52525B] hover:text-[#34D399]"
+                      title="Set as active"
+                    >
+                      <Check size={9} />
+                    </button>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm(`Delete "${record.name}"?`)) return
+                      await deleteDNA(record.id)
+                      if (viewingId === record.id) setViewingId(null)
+                    }}
+                    className="p-0.5 bg-[#27272A] border border-[#3F3F46] rounded text-[#52525B] hover:text-red-400"
+                    title="Delete"
+                  >
+                    <Trash2 size={9} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* New Analysis button */}
+        {showNameInput ? (
+          <form onSubmit={(e) => { e.preventDefault(); handleGenerate() }} className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={newDNAName}
+              onChange={(e) => setNewDNAName(e.target.value)}
+              placeholder={`DNA #${brandDNAs.length + 1}`}
+              className="bg-[#27272A] border border-[#A78BFA]/50 rounded-xl px-3 py-1.5 text-sm text-[#FAFAFA] placeholder-[#52525B] focus:outline-none w-36"
+            />
+            <button
+              type="submit"
+              disabled={generating}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/20 border border-accent/40 rounded-xl text-accent text-sm font-medium hover:bg-accent/30 disabled:opacity-60 transition-all"
+            >
+              {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              {generating ? 'Analyzing...' : 'Generate'}
+            </button>
+            <button type="button" onClick={() => setShowNameInput(false)} className="text-[#52525B] hover:text-[#A1A1AA] text-sm">Cancel</button>
+          </form>
+        ) : (
+          <button
+            onClick={() => setShowNameInput(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#27272A] border border-dashed border-[#3F3F46] rounded-xl text-[#52525B] hover:text-accent hover:border-accent/40 text-sm transition-all"
+          >
+            <Plus size={13} /> New Analysis
+          </button>
+        )}
+      </motion.div>
+
+      {error && (
+        <motion.div variants={itemVariants} className="flex items-center gap-2 text-amber-400 text-sm bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3">
+          <AlertCircle size={16} />{error}
+        </motion.div>
+      )}
+
       {/* Header */}
       <motion.div variants={itemVariants} className="flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold text-[#FAFAFA] flex items-center gap-3">
             <Dna className="text-accent" size={28} />
-            Brand DNA
+            {viewingRecord?.name ?? 'Brand DNA'}
           </h1>
           <p className="text-[#A1A1AA] mt-1">AI-extracted patterns from your {meta.itemsAnalyzed} saved items</p>
         </div>
-        <button
-          onClick={handleReanalyze}
-          disabled={isReanalyzing}
-          className="flex items-center gap-2 px-4 py-2 bg-accent/20 border border-accent/40 rounded-xl text-accent text-sm font-medium hover:bg-accent/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-        >
-          {isReanalyzing ? (
-            <><Loader2 size={14} className="animate-spin" /> Analyzing...</>
-          ) : (
-            <><Sparkles size={14} /> Re-analyze</>
-          )}
-        </button>
       </motion.div>
-      {reanalyzeError && (
-        <motion.div variants={itemVariants} className="flex items-center gap-2 text-amber-400 text-sm bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3">
-          <AlertCircle size={16} />{reanalyzeError}
-        </motion.div>
-      )}
 
       {/* Overview Bar */}
       <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4">

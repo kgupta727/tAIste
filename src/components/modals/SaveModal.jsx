@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Link2, Upload, Check, Loader2, Plus, Image as ImageIcon } from 'lucide-react'
 import { useUIStore } from '../../store/uiStore'
 import { useInspirations } from '../../hooks/useInspirations'
+import { useFolders } from '../../hooks/useFolders'
 
 const LOADING_STEPS = [
   'Fetching page...',
@@ -51,6 +52,7 @@ function getSuggestedTags(url) {
 export default function SaveModal() {
   const { saveModalOpen, closeSaveModal } = useUIStore()
   const { addInspiration } = useInspirations()
+  const { folders } = useFolders()
 
   const [tab, setTab] = useState('url')
   const [url, setUrl] = useState('')
@@ -59,6 +61,7 @@ export default function SaveModal() {
   const [tags, setTags] = useState([])
   const [newTag, setNewTag] = useState('')
   const [notes, setNotes] = useState('')
+  const [selectedFolderId, setSelectedFolderId] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [uploadedImage, setUploadedImage] = useState(null)
   const [analysisResult, setAnalysisResult] = useState(null)
@@ -74,6 +77,7 @@ export default function SaveModal() {
     setTags([])
     setNewTag('')
     setNotes('')
+    setSelectedFolderId(null)
     setUploadedImage(null)
     setAnalysisResult(null)
     setScreenshotUrl(null)
@@ -154,6 +158,7 @@ export default function SaveModal() {
       tags,
       savedAt: new Date().toISOString(),
       notes,
+      folderId: selectedFolderId ?? null,
       analysis: analysisResult || FALLBACK_ANALYSIS,
     }
     await addInspiration(item)
@@ -426,6 +431,23 @@ export default function SaveModal() {
                       className="w-full bg-[#27272A] border border-[#3F3F46] rounded-xl px-3 py-2.5 text-sm text-[#FAFAFA] placeholder-[#A1A1AA] focus:outline-none focus:border-[#A78BFA] transition-all resize-none"
                     />
                   </div>
+
+                  {/* Folder */}
+                  {folders && folders.length > 0 && (
+                    <div>
+                      <label className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-2 block">Save to Folder</label>
+                      <select
+                        value={selectedFolderId ?? ''}
+                        onChange={(e) => setSelectedFolderId(e.target.value || null)}
+                        className="w-full bg-[#27272A] border border-[#3F3F46] rounded-xl px-3 py-2.5 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#A78BFA] transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">No Folder</option>
+                        {folders.map((f) => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <motion.button
                     onClick={handleSave}

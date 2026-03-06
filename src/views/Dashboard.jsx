@@ -39,8 +39,8 @@ export default function Dashboard() {
   const statCards = [
     { icon: BookMarked, label: 'Saves', value: inspirations.length, color: '#A78BFA', bg: 'rgba(167,139,250,0.1)' },
     { icon: Tags, label: 'Tags', value: uniqueTagCount, color: '#34D399', bg: 'rgba(52,211,153,0.1)' },
-    { icon: BrainCircuit, label: 'DNA Confidence', value: brandDNA?.meta?.confidenceScore ?? 87, suffix: '%', color: '#60A5FA', bg: 'rgba(96,165,250,0.1)' },
-    { icon: Palette, label: 'Color Palette', value: brandDNA?.colorPalette?.primary?.length ?? 5, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+    { icon: BrainCircuit, label: 'DNA Confidence', value: brandDNA?.meta?.confidenceScore ?? 0, suffix: '%', color: '#60A5FA', bg: 'rgba(96,165,250,0.1)' },
+    { icon: Palette, label: 'Color Palette', value: brandDNA?.colorPalette?.primary?.length ?? 0, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   ]
 
   const ref = useRef(null)
@@ -56,7 +56,9 @@ export default function Dashboard() {
       {/* Greeting */}
       <motion.div variants={itemVariants}>
         <h1 className="text-3xl font-bold text-[#FAFAFA]">Good evening 👋</h1>
-        <p className="text-[#A1A1AA] mt-1 text-base">Your brand DNA is taking shape. {brandDNA?.meta?.confidenceScore ?? 87}% confidence and counting.</p>
+        <p className="text-[#A1A1AA] mt-1 text-base">
+          {brandDNA ? `Your brand DNA is taking shape. ${brandDNA.meta?.confidenceScore ?? 0}% confidence and counting.` : 'Save inspirations and generate your Brand DNA to get started.'}
+        </p>
       </motion.div>
 
       {/* Stats Row */}
@@ -131,43 +133,46 @@ export default function Dashboard() {
           variants={itemVariants}
           className="lg:col-span-2 bg-[#18181B] border border-[#3F3F46] rounded-xl p-6 relative overflow-hidden group"
         >
-          {/* Gradient accent */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-[#A78BFA]/10 to-transparent rounded-bl-full" />
 
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-1">Aesthetic Archetype</p>
-              <h3 className="text-2xl font-bold text-[#FAFAFA]">{brandDNA?.aestheticSignature?.archetype}</h3>
-              <p className="text-[#A78BFA] text-sm mt-0.5 font-medium italic">{brandDNA?.aestheticSignature?.tagline}</p>
-            </div>
-            <div className="px-3 py-1 bg-[#A78BFA]/20 border border-[#A78BFA]/40 rounded-full text-accent text-xs font-medium">
-              {brandDNA?.meta?.confidenceScore ?? 87}% confidence
-            </div>
-          </div>
-
-          {/* Color swatches */}
-          <div className="flex gap-2 mb-5">
-            {(brandDNA?.colorPalette?.primary ?? []).map((c) => (
-              <div key={c.hex} className="group/swatch relative">
-                <div
-                  className="w-8 h-8 rounded-lg border border-white/10"
-                  style={{ background: c.hex }}
-                  title={`${c.name} ${c.hex}`}
-                />
+          {brandDNA ? (
+            <>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-1">Aesthetic Archetype</p>
+                  <h3 className="text-2xl font-bold text-[#FAFAFA]">{brandDNA.aestheticSignature?.archetype}</h3>
+                  <p className="text-[#A78BFA] text-sm mt-0.5 font-medium italic">{brandDNA.aestheticSignature?.tagline}</p>
+                </div>
+                <div className="px-3 py-1 bg-[#A78BFA]/20 border border-[#A78BFA]/40 rounded-full text-accent text-xs font-medium">
+                  {brandDNA.meta?.confidenceScore ?? 0}% confidence
+                </div>
               </div>
-            ))}
-          </div>
-
-          <p className="text-[#A1A1AA] text-sm leading-relaxed line-clamp-2">
-            {brandDNA?.aestheticSignature?.description}
-          </p>
-
-          <Link
-            href="/brand-dna"
-            className="mt-4 inline-flex items-center gap-1.5 text-accent hover:text-accent-hover text-sm font-medium transition-colors"
-          >
-            View Full Analysis <ArrowRight size={14} />
-          </Link>
+              <div className="flex gap-2 mb-5">
+                {(brandDNA.colorPalette?.primary ?? []).map((c) => (
+                  <div key={c.hex} className="group/swatch relative">
+                    <div className="w-8 h-8 rounded-lg border border-white/10" style={{ background: c.hex }} title={`${c.name} ${c.hex}`} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[#A1A1AA] text-sm leading-relaxed line-clamp-2">{brandDNA.aestheticSignature?.description}</p>
+              <Link href="/brand-dna" className="mt-4 inline-flex items-center gap-1.5 text-accent hover:text-accent-hover text-sm font-medium transition-colors">
+                View Full Analysis <ArrowRight size={14} />
+              </Link>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 gap-4 text-center">
+              <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                <Dna size={22} className="text-accent" />
+              </div>
+              <div>
+                <p className="text-[#FAFAFA] font-semibold">No Brand DNA yet</p>
+                <p className="text-[#A1A1AA] text-sm mt-1">Save inspirations, then generate your first analysis.</p>
+              </div>
+              <Link href="/brand-dna" className="flex items-center gap-1.5 text-accent hover:text-accent-hover text-sm font-medium transition-colors">
+                Generate Brand DNA <ArrowRight size={14} />
+              </Link>
+            </div>
+          )}
         </motion.div>
 
         {/* Quick Actions */}
@@ -231,8 +236,19 @@ export default function Dashboard() {
         className="flex items-center gap-2 text-[#52525B] text-sm pb-4"
       >
         <Zap size={14} />
-        <span>Brand DNA was last analyzed 2 hours ago based on 38 saved items.</span>
-        <Link href="/brand-dna" className="text-accent hover:text-accent-hover transition-colors underline underline-offset-2">Refresh →</Link>
+        {brandDNA ? (
+          <>
+            <span>Brand DNA last analyzed based on {brandDNA.meta?.itemsAnalyzed ?? 0} saved items.</span>
+            <Link href="/brand-dna" className="text-accent hover:text-accent-hover transition-colors underline underline-offset-2">View →</Link>
+          </>
+        ) : (
+          <>
+            <span>You have {inspirations.length} inspiration{inspirations.length !== 1 ? 's' : ''} saved.</span>
+            {inspirations.length > 0 && (
+              <Link href="/brand-dna" className="text-accent hover:text-accent-hover transition-colors underline underline-offset-2">Generate DNA →</Link>
+            )}
+          </>
+        )}
       </motion.div>
     </motion.div>
   )

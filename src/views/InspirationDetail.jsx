@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowLeft, ExternalLink, Plus, X, ChevronRight, Trash2 } from 'lucide-react'
 import { useInspirations } from '../hooks/useInspirations'
+import { useFolders } from '../hooks/useFolders'
 
 const containerVariants = {
   hidden: {},
@@ -20,6 +21,7 @@ export default function InspirationDetail() {
   const { id } = useParams()
   const router = useRouter()
   const { inspirations, updateInspiration, removeInspiration } = useInspirations()
+  const { folders } = useFolders()
 
   const handleDelete = async () => {
     if (!window.confirm('Remove this inspiration?')) return
@@ -32,6 +34,7 @@ export default function InspirationDetail() {
   const [notes, setNotes] = useState(item?.notes || '')
   const [tagInput, setTagInput] = useState('')
   const [localTags, setLocalTags] = useState(item?.tags || [])
+  const [localFolderId, setLocalFolderId] = useState(item?.folderId ?? null)
 
   const related = useMemo(() => {
     if (!item) return []
@@ -144,9 +147,26 @@ export default function InspirationDetail() {
             </div>
           </div>
 
+          {/* Folder */}
+          {folders && folders.length > 0 && (
+            <div>
+              <label className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-2 block">Folder</label>
+              <select
+                value={localFolderId ?? ''}
+                onChange={(e) => setLocalFolderId(e.target.value || null)}
+                className="w-full bg-[#18181B] border border-[#3F3F46] rounded-xl px-3 py-2.5 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#A78BFA] transition-all appearance-none cursor-pointer"
+              >
+                <option value="">No Folder</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Save changes */}
           <button
-            onClick={() => updateInspiration(item.id, { notes, tags: localTags })}
+            onClick={() => updateInspiration(item.id, { notes, tags: localTags, folderId: localFolderId })}
             className="w-full py-2.5 bg-accent/20 border border-accent/40 hover:bg-accent/30 rounded-xl text-accent text-sm font-medium transition-all"
           >
             Save Changes

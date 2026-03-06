@@ -1,9 +1,19 @@
 import { createClient } from '@/src/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { BRAND_DNA as DEFAULT_BRAND_DNA } from '@/src/data/brandDNA'
+
+export function fromDnaRow(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    name: row.name,
+    isActive: row.is_active,
+    data: row.data,
+    updatedAt: row.updated_at,
+    createdAt: row.created_at,
+  }
+}
 
 // ── GET /api/brand-dna ───────────────────────────────────────────────────────
-// Returns the user's stored brand DNA, falling back to the static default.
+// Returns ALL of the user's brand DNA profiles (may be empty array).
 
 export async function GET() {
   const supabase = await createClient()
@@ -12,20 +22,17 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('brand_dna')
-    .select('data, updated_at')
+    .select('id, name, is_active, data, updated_at, created_at')
     .eq('user_id', user.id)
-    .single()
+    .order('created_at', { ascending: true })
 
-  if (error && error.code !== 'PGRST116') {
-    // PGRST116 = no rows found, that's fine — we fall back to default
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json(data?.data ?? DEFAULT_BRAND_DNA)
+  return NextResponse.json((data ?? []).map(fromDnaRow))
 }
 
 // ── POST /api/brand-dna ──────────────────────────────────────────────────────
-// Upserts the user's brand DNA. Called after AI generation (Phase 3).
+// Creates a NEW brand DNA record with the given name and data payload.
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -33,16 +40,21 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
+  const name = (body.name ?? 'Brand DNA').trim()
 
   const { data, error } = await supabase
     .from('brand_dna')
-    .upsert(
-      { user_id: user.id, data: body, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' }
-    )
-    .select('data')
+    .insert({
+      user_id: user.id,
+      name,
+      data: body.data ?? {},
+      is_active: body.isActive ?? false,
+      updated_at: new Date().toISOString(),
+    })
+    .select('id, name, is_active, data, updated_at, created_at')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data.data, { status: 200 })
+  return NextResponse.json(fromDnaRow(data), { status: 201 })
 }
+

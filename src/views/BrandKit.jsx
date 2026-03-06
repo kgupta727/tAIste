@@ -101,10 +101,11 @@ export default function BrandKit() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="flex h-full min-h-screen"
+      className="flex h-full"
     >
       {/* Main content */}
-      <div className="flex-1 px-8 py-8 max-w-4xl space-y-8">
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-8 py-8 max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <motion.div variants={itemVariants}>
           <div className="flex items-center gap-3 mb-1">
@@ -256,12 +257,13 @@ export default function BrandKit() {
             </div>
           </motion.div>
         )}
+        </div>
       </div>
 
       {/* Export Panel (Right Sidebar) */}
       <motion.div
         variants={itemVariants}
-        className="w-72 flex-shrink-0 border-l border-[#3F3F46] bg-[#18181B] sticky top-0 h-screen overflow-y-auto"
+        className="w-72 flex-shrink-0 border-l border-[#3F3F46] bg-[#18181B] overflow-y-auto"
       >
         <div className="p-5">
           <h2 className="font-semibold text-[#FAFAFA] mb-1">Export</h2>

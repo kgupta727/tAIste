@@ -8,9 +8,9 @@ Return ONLY valid JSON (no markdown fences) matching this EXACT schema:
 {
   "meta": {
     "itemsAnalyzed": number,
-    "confidenceScore": number (50–97),
     "lastAnalyzed": "just now",
-    "dominantStyle": "string (e.g. 'Dark Minimalism', 'Editorial Modernism', 'Brutalist Digital')"
+    "dominantStyle": "string (e.g. 'Dark Minimalism', 'Editorial Modernism', 'Brutalist Digital')",
+    "aestheticCoherence": number (0–100)
   },
   "aestheticSignature": {
     "archetype": "string (a unique, evocative title e.g. 'The Refined Technologist', 'The Digital Purist')",
@@ -44,12 +44,15 @@ Rules:
 - aestheticSignature: make it feel earned and specific to their actual taste, not generic
 - visualTone.descriptors: 6–8 labels ordered by weight descending
 - typography.recommendations: 3–4 real fonts that fit their aesthetic
-- confidence score should reflect how many items were analyzed (more = higher)`
+- aestheticCoherence: rate 0–100 how internally consistent and distinctive this aesthetic is — low if the saves are all over the place, high if there's a razor-sharp singular voice. Be honest, not generous.`
 
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json().catch(() => ({}))
+  const dnaName: string = (body.name ?? '').trim() || `DNA #${Date.now().toString(36).toUpperCase()}`
 
   // Fetch all user's inspirations
   const { data: rows, error } = await supabase
@@ -143,20 +146,58 @@ Layout patterns: ${[...new Set(layoutList)].slice(0, 5).join(' | ')}
       { role: 'user', content: dataContext },
     ],
     max_tokens: 1200,
-    temperature: 0.7,
+    temperature: 0.3,
   })
 
   const raw = completion.choices[0].message.content?.trim() ?? ''
   const jsonStr = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
   const brandDNA = JSON.parse(jsonStr)
-  brandDNA.meta.itemsAnalyzed = rows.length
 
-  // Upsert to brand_dna table
-  const { error: upsertErr } = await supabase
+  // ── Hybrid confidence score ────────────────────────────────────────────────
+  // D: deterministic signal quality (0–1)
+  const n = rows.length
+  const uniqueDomains = new Set(rows.map((r: { source_domain: string }) => r.source_domain)).size
+  const totalMoodMentions = moodList.length
+  const topMoodCount = totalMoodMentions > 0
+    ? Math.max(...Object.values(moodFreq))
+    : 0
+  const totalColorScore = topColors.reduce((s, c) => s + c.score, 0)
+  const top3ColorShare = totalColorScore > 0
+    ? topColors.slice(0, 3).reduce((s, c) => s + c.score, 0) / totalColorScore
+    : 0
+
+  const fCount       = Math.min(1, Math.log2(n + 1) / Math.log2(22))
+  const fDiversity   = Math.min(1, uniqueDomains / Math.min(n, 10))
+  const fMood        = totalMoodMentions > 0 ? topMoodCount / totalMoodMentions : 0
+  const fColor       = top3ColorShare
+
+  const D = 0.30 * fCount + 0.25 * fDiversity + 0.25 * fMood + 0.20 * fColor
+
+  // G: GPT's aesthetic coherence judgment (0–1)
+  const rawCoherence = brandDNA.meta?.aestheticCoherence ?? 50
+  const G = Math.max(0, Math.min(100, rawCoherence)) / 100
+
+  // Final score: equal blend of data quality (D) and aesthetic coherence (G), scaled 50–97
+  const confidenceScore = Math.min(97, Math.round(50 + (0.5 * D + 0.5 * G) * 47))
+
+  brandDNA.meta.itemsAnalyzed = n
+  brandDNA.meta.confidenceScore = confidenceScore
+  // Keep aestheticCoherence in meta for transparency; strip nothing
+
+  // Insert a new brand_dna row (supports multiple DNA profiles per user)
+  const { data: inserted, error: insertErr } = await supabase
     .from('brand_dna')
-    .upsert({ user_id: user.id, data: brandDNA, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    .insert({
+      user_id: user.id,
+      name: dnaName,
+      data: brandDNA,
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .select('id, name, is_active, data, updated_at, created_at')
+    .single()
 
-  if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 })
+  if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
 
-  return NextResponse.json(brandDNA)
+  return NextResponse.json({ id: inserted.id, name: inserted.name, ...brandDNA })
 }

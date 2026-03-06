@@ -11,11 +11,18 @@ export function useInspirations() {
     revalidateOnFocus: false,
   })
 
-  const { selectedTags, searchQuery, sortBy } = useSwipeStore()
+  const { selectedTags, searchQuery, sortBy, selectedFolderId } = useSwipeStore()
 
   const filtered = useMemo(() => {
     const items = data ?? []
     let result = [...items]
+
+    // Folder filter
+    if (selectedFolderId === 'uncategorized') {
+      result = result.filter((item) => !item.folderId)
+    } else if (selectedFolderId) {
+      result = result.filter((item) => item.folderId === selectedFolderId)
+    }
 
     if (selectedTags.length > 0) {
       result = result.filter((item) =>
@@ -40,7 +47,7 @@ export function useInspirations() {
     }
 
     return result
-  }, [data, selectedTags, searchQuery, sortBy])
+  }, [data, selectedTags, searchQuery, sortBy, selectedFolderId])
 
   const addInspiration = async (item: Record<string, unknown>) => {
     // Optimistic insert

@@ -1,11 +1,21 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { createClient } from '@/src/lib/supabase/client'
 
 export default function SignUpPage() {
   const supabase = createClient()
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        window.location.href = '/'
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [supabase])
 
   return (
     <Auth

@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   Package, FileText, Heart, Code2, Figma, Braces, Download,
-  Eye, EyeOff, Check, ChevronRight, Volume2, AlertCircle
+  Eye, EyeOff, Check, ChevronRight, Volume2, AlertCircle, Dna
 } from 'lucide-react'
 import { BRAND_KIT, EXPORT_FORMATS, generateExportContent } from '../data/brandKit'
 import { useInspirations } from '../hooks/useInspirations'
@@ -49,10 +50,12 @@ function buildLiveKit(brandDNA, inspirations) {
   const heading = recs[0] ?? { name: 'Inter' }
   const body = recs[1] ?? { name: 'Inter' }
   const mono = recs.find((r) => r.category?.toLowerCase().includes('mono')) ?? recs[2] ?? { name: 'JetBrains Mono' }
-  const voiceDescriptors = (brandDNA?.visualTone?.descriptors ?? [])
-    .filter((d) => d.weight >= 0.6)
-    .map((d) => d.label)
-    .slice(0, 5)
+  // Use the actual voice descriptors from toneOfVoice, falling back to visual
+  // tone labels only if toneOfVoice was not generated (older DNA records)
+  const voiceDescriptors = (
+    brandDNA?.toneOfVoice?.voice ??
+    (brandDNA?.visualTone?.descriptors ?? []).filter((d) => d.weight >= 0.6).map((d) => d.label)
+  ).slice(0, 5)
   const colors = [...primaryColors, ...accentColors]
   return {
     name: (brandDNA?.aestheticSignature?.archetype ?? 'My') + ' Brand Kit',
@@ -67,8 +70,8 @@ function buildLiveKit(brandDNA, inspirations) {
     },
     toneOfVoice: {
       descriptors: voiceDescriptors.length > 0 ? voiceDescriptors : BRAND_KIT.toneOfVoice.descriptors,
-      avoid: BRAND_KIT.toneOfVoice.avoid,
-      examples: BRAND_KIT.toneOfVoice.examples,
+      avoid: brandDNA?.toneOfVoice?.avoid ?? BRAND_KIT.toneOfVoice.avoid,
+      examples: brandDNA?.toneOfVoice?.examples ?? BRAND_KIT.toneOfVoice.examples,
     },
     referenceAssets: inspirations.slice(0, 6).map((i) => i.id),
   }
@@ -95,6 +98,28 @@ export default function BrandKit() {
   }
 
   const refAssetItems = inspirations.slice(0, 6)
+
+  if (!brandDNA) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-6 text-center px-8">
+        <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+          <Package size={32} className="text-accent" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-[#FAFAFA]">No Brand Kit yet</h2>
+          <p className="text-[#A1A1AA] text-sm mt-2 max-w-sm mx-auto">
+            Generate your Brand DNA first — your personalized kit will be ready to export once you do.
+          </p>
+        </div>
+        <Link
+          href="/brand-dna"
+          className="flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-xl text-sm transition-colors"
+        >
+          <Dna size={16} /> Go to Brand DNA
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <motion.div

@@ -36,7 +36,7 @@ export function fromRow(row: Record<string, unknown>) {
 }
 
 // ── GET /api/inspirations ─────────────────────────────────────────────────────
-// Returns the user's inspirations, seeding demo data for first-time users.
+// Returns the authenticated user's inspirations (scoped by user_id).
 
 export async function GET() {
   const supabase = await createClient()

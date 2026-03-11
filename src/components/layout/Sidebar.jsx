@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { to: '/swipe-file', icon: Layers, label: 'Swipe File' },
   { to: '/brand-dna', icon: Dna, label: 'Brand DNA' },
   { to: '/brand-kit', icon: Package, label: 'Brand Kit' },
+  { to: '/get-inspired', icon: Sparkles, label: 'Get Inspired' },
 ]
 
 export default function Sidebar() {

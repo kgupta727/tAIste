@@ -134,6 +134,19 @@ export default function SaveModal() {
   const handleSave = async () => {
     let imageUrl = screenshotUrl || uploadedImage || UNSPLASH_FALLBACKS[Math.floor(Math.random() * UNSPLASH_FALLBACKS.length)]
 
+    // Persist Microlink screenshot to Supabase so it never rots as a third-party URL
+    if (tab === 'url' && screenshotUrl) {
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: screenshotUrl }),
+        })
+        const result = await res.json()
+        if (result.url) imageUrl = result.url
+      } catch (_) { /* keep original screenshotUrl as fallback */ }
+    }
+
     // Upload base64 image to Supabase Storage
     if (uploadedImage?.startsWith('data:')) {
       try {

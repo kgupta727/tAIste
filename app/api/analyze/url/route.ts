@@ -26,17 +26,35 @@ export async function POST(request: Request) {
 
   const fullUrl = url.startsWith('http') ? url : `https://${url}`
 
-  // 1. Capture screenshot via Microlink
-  const mlRes = await fetch(
-    `https://api.microlink.io/?url=${encodeURIComponent(fullUrl)}&screenshot=true&meta=true`,
-    { next: { revalidate: 0 } }
-  )
-  const mlData = await mlRes.json()
+  // 1. Capture full-page screenshot via Screenshotone API
+  const screenshotKey = process.env.SCREENSHOTONE_ACCESS_KEY
+  if (!screenshotKey) {
+    return NextResponse.json({ error: 'SCREENSHOTONE_ACCESS_KEY env var not set' }, { status: 500 })
+  }
 
-  const screenshotUrl: string | null = mlData?.data?.screenshot?.url ?? null
-  const pageTitle: string = mlData?.data?.title ?? `Saved from ${new URL(fullUrl).hostname}`
+  let screenshotBase64: string | null = null
+  let pageTitle: string = `Saved from ${new URL(fullUrl).hostname}`
 
-  if (!screenshotUrl) {
+  try {
+    const params = new URLSearchParams({
+      access_key: screenshotKey,
+      url: fullUrl,
+      full_page: 'true',
+      format: 'jpg',
+      image_quality: '80',
+      viewport_width: '1440',
+      viewport_height: '900',
+      delay: '1',
+    })
+    const res = await fetch(`https://api.screenshotone.com/take?${params}`, { next: { revalidate: 0 } })
+    if (!res.ok) throw new Error(`Screenshotone returned ${res.status}`)
+    const arrayBuffer = await res.arrayBuffer()
+    screenshotBase64 = `data:image/jpeg;base64,${Buffer.from(arrayBuffer).toString('base64')}`
+  } catch (err) {
+    console.error('[url/route] Screenshot failed:', err)
+  }
+
+  if (!screenshotBase64) {
     return NextResponse.json({ error: 'Could not capture screenshot for this URL' }, { status: 422 })
   }
 
@@ -50,7 +68,7 @@ export async function POST(request: Request) {
         role: 'user',
         content: [
           { type: 'text', text: ANALYSIS_PROMPT },
-          { type: 'image_url', image_url: { url: screenshotUrl, detail: 'low' } },
+          { type: 'image_url', image_url: { url: screenshotBase64, detail: 'high' } },
         ],
       },
     ],
@@ -59,7 +77,15 @@ export async function POST(request: Request) {
 
   const raw = completion.choices[0].message.content?.trim() ?? ''
   const jsonStr = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
-  const analysis = JSON.parse(jsonStr)
 
-  return NextResponse.json({ screenshotUrl, analysis, title: pageTitle })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let analysis: any
+  try {
+    analysis = JSON.parse(jsonStr)
+  } catch {
+    return NextResponse.json({ error: 'AI returned malformed JSON — please try again.' }, { status: 500 })
+  }
+
+  // screenshotBase64 is a data URI — caller's /api/upload will persist it to Supabase Storage
+  return NextResponse.json({ screenshotUrl: screenshotBase64, analysis, title: pageTitle })
 }

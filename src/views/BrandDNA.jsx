@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
-import { Dna, Sparkles, Palette, Type, Eye, Clock, Target, Loader2, AlertCircle, Plus, Trash2, Check, Pencil } from 'lucide-react'
+import { Dna, Sparkles, Palette, Type, Eye, Clock, Target, Loader2, AlertCircle, Plus, Trash2, Check, Pencil, Volume2 } from 'lucide-react'
 import AnimatedCounter from '../components/common/AnimatedCounter'
 import { useBrandDNA } from '../hooks/useBrandDNA'
 
@@ -167,7 +167,21 @@ export default function BrandDNA() {
     )
   }
 
-  const { meta, colorPalette, typography, visualTone, aestheticSignature } = brandDNA
+  const { meta, colorPalette, typography, visualTone, aestheticSignature, toneOfVoice } = brandDNA
+
+  const lastAnalyzedDisplay = (() => {
+    const raw = meta.lastAnalyzed
+    if (!raw || raw === 'just now') {
+      return viewingRecord?.updatedAt
+        ? new Date(viewingRecord.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'Just now'
+    }
+    try {
+      return new Date(raw).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    } catch {
+      return 'Just now'
+    }
+  })()
 
   return (
     <motion.div
@@ -315,7 +329,7 @@ export default function BrandDNA() {
           },
           {
             label: 'Last Analyzed',
-            value: meta.lastAnalyzed,
+            value: lastAnalyzedDisplay,
             icon: Clock,
             color: '#34D399',
             text: true,
@@ -487,7 +501,7 @@ export default function BrandDNA() {
           {[
             { label: 'Contrast Level', value: visualTone.contrastLevel, color: '#A78BFA' },
             { label: 'Whitespace', value: visualTone.whitespacePreference, color: '#60A5FA' },
-            { label: 'Visual Weight', value: 'Heavy → Balanced', color: '#34D399' },
+            { label: 'Aesthetic Coherence', value: `${meta.aestheticCoherence ?? 0}%`, color: '#34D399' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-[#27272A] border border-[#3F3F46] rounded-xl p-4">
               <p className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-1">{label}</p>
@@ -500,6 +514,58 @@ export default function BrandDNA() {
           <p className="text-[#FAFAFA] text-sm leading-relaxed">{visualTone.summary}</p>
         </div>
       </motion.div>
+
+      {/* Tone of Voice — only present on DNAs generated after v2 */}
+      {toneOfVoice && (
+        <motion.div variants={itemVariants} className="bg-[#18181B] border border-[#3F3F46] rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <Volume2 size={20} className="text-accent" />
+            <h2 className="text-xl font-semibold text-[#FAFAFA]">Tone of Voice</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-5">
+              <div>
+                <p className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-3">Voice</p>
+                <div className="flex flex-wrap gap-2">
+                  {(toneOfVoice.voice ?? []).map((v) => (
+                    <span key={v} className="px-3 py-1.5 bg-[#27272A] border border-[#34D399]/30 text-[#34D399] rounded-lg text-sm">{v}</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-3">Avoid</p>
+                <div className="flex flex-wrap gap-2">
+                  {(toneOfVoice.avoid ?? []).map((v) => (
+                    <span key={v} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#27272A] border border-red-500/30 text-red-400 rounded-lg text-sm">
+                      <AlertCircle size={12} /> {v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[#A1A1AA] text-xs font-medium uppercase tracking-wider mb-3">Examples</p>
+              <div className="space-y-2">
+                {(toneOfVoice.examples ?? []).map((ex, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm border ${
+                      ex.type === 'good'
+                        ? 'bg-[#34D399]/10 border-[#34D399]/20 text-[#FAFAFA]'
+                        : 'bg-red-500/10 border-red-500/20 text-[#A1A1AA] line-through'
+                    }`}
+                  >
+                    <span className="flex-shrink-0 mt-0.5">{ex.type === 'good' ? '✅' : '❌'}</span>
+                    {ex.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Aesthetic Signature */}
       <motion.div

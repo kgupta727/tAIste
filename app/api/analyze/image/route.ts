@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         role: 'user',
         content: [
           { type: 'text', text: ANALYSIS_PROMPT },
-          { type: 'image_url', image_url: { url: imageData, detail: 'low' } },
+          { type: 'image_url', image_url: { url: imageData, detail: 'high' } },
         ],
       },
     ],
@@ -44,7 +44,14 @@ export async function POST(request: Request) {
 
   const raw = completion.choices[0].message.content?.trim() ?? ''
   const jsonStr = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
-  const analysis = JSON.parse(jsonStr)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let analysis: any
+  try {
+    analysis = JSON.parse(jsonStr)
+  } catch {
+    return NextResponse.json({ error: 'AI returned malformed JSON — please try again.' }, { status: 500 })
+  }
 
   return NextResponse.json({ analysis })
 }

@@ -82,6 +82,17 @@ export function generateExportContent(formatId, kit, brandDNA = null) {
   const keywords = (brandDNA?.aestheticSignature?.keywords ?? ['precision', 'clarity', 'depth', 'craft', 'intention', 'restraint']).join(', ')
   const style = brandDNA?.meta?.dominantStyle ?? 'Dark Minimalism'
   const confidence = brandDNA?.meta?.confidenceScore ?? 87
+  const whitespace = brandDNA?.visualTone?.whitespacePreference ?? 'Generous'
+  const contrastLvl = brandDNA?.visualTone?.contrastLevel ?? 'High'
+  const topDescriptors = (brandDNA?.visualTone?.descriptors ?? [])
+    .sort((a, b) => b.weight - a.weight).slice(0, 3).map((d) => d.label)
+  const accentColor = kit.colors.find((c) => c.role?.toLowerCase?.().includes('accent')) ?? kit.colors[0]
+  const visualPrinciples = [
+    `${whitespace} whitespace — ${whitespace === 'Tight' ? 'dense, focused compositions' : whitespace === 'Generous' ? 'let elements breathe and carry weight' : 'balanced rhythm between density and space'}`,
+    `${contrastLvl} contrast — ${contrastLvl === 'High' ? 'strong differentiation between surface and content' : contrastLvl === 'Low' ? 'soft, tonal transitions between elements' : 'measured contrast guiding visual hierarchy'}`,
+    ...topDescriptors.map((d) => `${d} — a defining characteristic of this aesthetic`),
+    accentColor ? `${accentColor.name} (${accentColor.hex}) as the primary accent color` : '',
+  ].filter(Boolean).slice(0, 5)
   switch (formatId) {
     case 'claude':
       return `# Brand Guidelines — ${kit.name}
@@ -179,11 +190,7 @@ ${kit.colors.map(c => c.role.padEnd(20) + ': ' + c.hex + ' (' + c.name + ')').jo
 - Monospace: ${kit.typography.mono.family}
 
 ## Visual Principles
-- Dark minimalism — deep surfaces, strategic color
-- Generous whitespace — let elements breathe
-- Violet accents for interactivity and emphasis
-- High contrast text on dark backgrounds
-- Subtle borders, not heavy shadows
+${visualPrinciples.map((p) => `- ${p}`).join('\n')}
 
 ## Tone of Voice
 Voice: ${kit.toneOfVoice.descriptors.join(' · ')}
@@ -202,9 +209,9 @@ ${description}
           value: c.hex,
           description: c.usage,
         })).concat([
-          { name: 'Font/Heading', type: 'STRING', value: 'Inter Bold' },
-          { name: 'Font/Body', type: 'STRING', value: 'Inter Regular' },
-          { name: 'Font/Mono', type: 'STRING', value: 'JetBrains Mono' },
+          { name: 'Font/Heading', type: 'STRING', value: `${kit.typography.heading.family} Bold` },
+          { name: 'Font/Body', type: 'STRING', value: `${kit.typography.body.family} Regular` },
+          { name: 'Font/Mono', type: 'STRING', value: kit.typography.mono.family },
         ]),
         collection: { name: kit.name, modes: ['Dark'] },
       }, null, 2)

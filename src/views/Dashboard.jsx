@@ -96,6 +96,23 @@ export default function Dashboard() {
             View all <ArrowRight size={14} />
           </Link>
         </div>
+        {recentSaves.length === 0 ? (
+          <div className="flex items-center gap-4 py-8 px-6 bg-[#18181B] border border-dashed border-[#3F3F46] rounded-xl">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+              <BookMarked size={18} className="text-accent" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[#FAFAFA] text-sm font-medium">No inspirations yet</p>
+              <p className="text-[#A1A1AA] text-xs mt-0.5">Save your first design to get started.</p>
+            </div>
+            <button
+              onClick={openSaveModal}
+              className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white text-sm font-semibold rounded-xl px-4 py-2 transition-colors flex-shrink-0"
+            >
+              <Plus size={14} /> Save one
+            </button>
+          </div>
+        ) : (
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
           {recentSaves.map((item, i) => (
             <motion.div
@@ -125,6 +142,7 @@ export default function Dashboard() {
             </motion.div>
           ))}
         </div>
+        )}
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

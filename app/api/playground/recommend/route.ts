@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/src/lib/supabase/server'
-import { REGISTRY } from '@/src/playground/registry'
+import { REGISTRY, REGISTRY_MAP } from '@/src/playground/registry'
 import type { LayoutHint } from '@/src/stores/playgroundStore'
 
 // Build a compact catalog description to include in the prompt
@@ -25,7 +25,7 @@ Return ONLY valid JSON (no markdown fences) matching this schema:
 [
   {
     "componentKey": "aurora",
-    "customizedProps": { "colorStops": "#3B82F6,#6366F1,#3B82F6" },
+    "customizedProps": { "colorStops": ["#3B82F6", "#6366F1", "#3B82F6"] },
     "layoutHint": "full",
     "reason": "The aurora creates an immersive premium feel matching the luxury archetype."
   }
@@ -35,6 +35,7 @@ Rules:
 - Only use componentKeys that appear in the provided catalog.
 - Vary the categories — include a mix of backgrounds, text animations, and UI components.
 - Customise colors to match the brand's primary and accent hex codes when relevant.
+- Props that are color arrays (e.g. colorStops, glitchColors) MUST be JSON arrays of hex strings, NOT comma-separated strings.
 - Do NOT wrap output in markdown or code fences.`
 
 export async function POST() {
@@ -93,9 +94,24 @@ export async function POST() {
       picks = JSON.parse(stripped)
     }
 
-    // Validate picks — filter out any unknown component keys
+    // Validate picks — filter out any unknown component keys, coerce color-list strings
     const validKeys = new Set(REGISTRY.map((c) => c.key))
-    const validated = picks.filter((p) => validKeys.has(p.componentKey))
+    const validated = picks
+      .filter((p) => validKeys.has(p.componentKey))
+      .map((p) => {
+        const entry = REGISTRY_MAP[p.componentKey]
+        if (entry && p.customizedProps) {
+          for (const prop of entry.propSchema) {
+            if (prop.type === 'color-list' && typeof p.customizedProps[prop.key] === 'string') {
+              p.customizedProps[prop.key] = (p.customizedProps[prop.key] as string)
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            }
+          }
+        }
+        return p
+      })
 
     return NextResponse.json({ picks: validated })
   } catch (err) {

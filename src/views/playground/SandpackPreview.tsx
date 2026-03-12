@@ -19,8 +19,12 @@ import {
 import type { SandpackFiles } from '@codesandbox/sandpack-react'
 import type { ComponentEntry } from '@/src/playground/registry'
 
+// Actual shape returned by reactbits.dev registry API
+type RegistryFile = { path: string; content: string; type: string }
+type RegistryJson = { files: RegistryFile[] }
+
 // ── Module-level cache to avoid redundant network requests ───────────────────
-const sourceCache = new Map<string, SandpackFiles>()
+const sourceCache = new Map<string, RegistryJson>()
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +45,8 @@ function serializeProps(props: Record<string, unknown>): string {
       if (typeof v === 'string') return `${k}="${v}"`
       if (typeof v === 'boolean') return v ? k : `${k}={false}`
       if (typeof v === 'number') return `${k}={${v}}`
+      // Arrays (e.g. color-list) → {["#111","#222"]}
+      if (Array.isArray(v)) return `${k}={${JSON.stringify(v)}}`
       return `${k}={${JSON.stringify(v)}}`
     })
     .join('\n    ')
@@ -50,14 +56,16 @@ function serializeProps(props: Record<string, unknown>): string {
 // We only inject the ones actually referenced in the component source
 // to avoid unnecessary CDN fetches that time out.
 const KNOWN_DEPS: Record<string, string> = {
-  'framer-motion': '^11',
-  'gsap': '^3',
-  'three': '^0.160',
-  '@react-three/fiber': '^8',
-  '@react-three/drei': '^9',
-  'ogl': '^1',
-  'matter-js': '^0.19',
-  'leva': '^0.9',
+  'framer-motion'      : '^11',
+  'motion'             : '^11',   // framer-motion v12+ alias
+  '@gsap/react'        : '^2',
+  'gsap'               : '^3',
+  'three'              : '^0.160',
+  '@react-three/fiber' : '^8',
+  '@react-three/drei'  : '^9',
+  'ogl'                : '^1',
+  'matter-js'          : '^0.19',
+  'leva'               : '^0.9',
 }
 
 function detectDeps(source: string): Record<string, string> {
@@ -71,23 +79,24 @@ function detectDeps(source: string): Record<string, string> {
 }
 
 // Build the minimal Sandpack file tree from a registry JSON response.
-// The registry JSON has shape: { files: Record<path, { code: string }> }
+// Registry shape: { files: Array<{ path: string, content: string }> }
+// Paths are like "Particles/Particles.tsx" — no leading slash.
 function buildFiles(
-  registryJson: { files: Record<string, { code: string }> },
+  registryJson: RegistryJson,
   componentName: string,
   props: Record<string, unknown>
 ): SandpackFiles & { __deps?: Record<string, string> } {
   const files: SandpackFiles = {}
-  let mainFilePath = `/${componentName}.tsx` // fallback assumption
+  let mainFilePath = `/${componentName}/${componentName}.tsx` // best guess
   let allSource = ''
 
-  for (const [rawPath, { code }] of Object.entries(registryJson.files)) {
+  for (const file of registryJson.files) {
     // Sandpack requires paths to start with /
-    const path = rawPath.startsWith('/') ? rawPath : `/${rawPath}`
-    files[path] = { code }
-    allSource += code
+    const path = file.path.startsWith('/') ? file.path : `/${file.path}`
+    files[path] = { code: file.content }
+    allSource += file.content
 
-    // Identify the main component file by matching the component name
+    // Identify the main component file
     const filename = path.split('/').pop() ?? ''
     if (
       filename === `${componentName}.tsx` ||
@@ -98,9 +107,7 @@ function buildFiles(
     }
   }
 
-  // Import path relative to /App.tsx:
-  // /components/Aurora.tsx → './components/Aurora'
-  // /Aurora.tsx            → './Aurora'
+  // Import path relative to /App.tsx (e.g. /Particles/Particles.tsx → ./Particles/Particles)
   const relImport = `./${mainFilePath.replace(/^\//, '').replace(/\.tsx?$/, '')}`
 
   const propsStr = serializeProps(props)
@@ -136,7 +143,6 @@ body { margin: 0; background: #09090B; }
 `,
   }
 
-  // Attach detected deps as a sidecar so SandpackPreview can read them
   ;(files as Record<string, unknown>).__deps = detectDeps(allSource)
 
   return files
@@ -179,7 +185,7 @@ export default function SandpackPreview({
 
     const cacheKey = entry.key
     if (sourceCache.has(cacheKey)) {
-      const raw = sourceCache.get(cacheKey) as unknown as { files: Record<string, { code: string }> }
+      const raw = sourceCache.get(cacheKey)!
       const built = buildFiles(raw, componentName, props)
       const { __deps, ...pureFiles } = built as Record<string, unknown>
       if (mountedRef.current) setSandpack({ files: pureFiles as SandpackFiles, deps: (__deps ?? {}) as Record<string, string> })
@@ -192,12 +198,11 @@ export default function SandpackPreview({
         if (!r.ok) throw new Error(`Registry fetch failed: ${r.status}`)
         return r.json()
       })
-      .then((json: { files: Record<string, { code: string }> }) => {
+      .then((json: RegistryJson) => {
         if (!mountedRef.current) return
         const built = buildFiles(json, componentName, props)
         const { __deps, ...pureFiles } = built as Record<string, unknown>
-        // Cache the raw registry JSON (source only, no App.tsx)
-        sourceCache.set(cacheKey, json as unknown as SandpackFiles)
+        sourceCache.set(cacheKey, json)
         setSandpack({ files: pureFiles as SandpackFiles, deps: (__deps ?? {}) as Record<string, string> })
       })
       .catch((e: Error) => {
@@ -216,7 +221,7 @@ export default function SandpackPreview({
     const cacheKey = entry.key
     const raw = sourceCache.get(cacheKey)
     if (!raw) return
-    const rebuilt = buildFiles(raw as unknown as { files: Record<string, { code: string }> }, componentName, props)
+    const rebuilt = buildFiles(raw, componentName, props)
     const { __deps, ...pureFiles } = rebuilt as Record<string, unknown>
     setSandpack({ files: pureFiles as SandpackFiles, deps: (__deps ?? {}) as Record<string, string> })
     // eslint-disable-next-line react-hooks/exhaustive-deps

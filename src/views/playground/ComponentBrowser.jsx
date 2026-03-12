@@ -6,10 +6,11 @@
  */
 
 import { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Search, X, GripVertical } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Search, X, GripVertical, Filter } from 'lucide-react'
 import { useDraggable } from '@dnd-kit/core'
 import { REGISTRY, CATEGORY_ORDER } from '@/src/playground/registry'
+import { SLOT_CATEGORY_HINTS, DEFAULT_SLOT_POSITIONS } from '@/src/stores/playgroundStore'
 import { usePlaygroundStore } from '@/src/stores/playgroundStore'
 
 // ── Draggable card ─────────────────────────────────────────────────────────────
@@ -19,7 +20,11 @@ function ComponentCard({ entry }) {
     id: `browser:${entry.key}`,
     data: { componentKey: entry.key, source: 'browser' },
   })
-  const addItem = usePlaygroundStore((s) => s.addItem)
+  const addItem             = usePlaygroundStore((s) => s.addItem)
+  const swapSlotComponent   = usePlaygroundStore((s) => s.swapSlotComponent)
+  const closeBrowser        = usePlaygroundStore((s) => s.closeBrowser)
+  const pendingSwapSlotId   = usePlaygroundStore((s) => s.pendingSwapSlotId)
+  const browserSlotFilter   = usePlaygroundStore((s) => s.browserSlotFilter)
 
   return (
     <div
@@ -31,7 +36,6 @@ function ComponentCard({ entry }) {
         bg-[#111113] border-[#3F3F46] hover:border-[#5227FF]/60 transition-all duration-150
         ${isDragging ? 'opacity-40 scale-95' : ''}
       `}
-      // Clicking adds to canvas directly (no drag required)
       onClick={() => {
         const entry2 = REGISTRY.find(c => c.key === entry.key)
         if (!entry2) return
@@ -39,12 +43,23 @@ function ComponentCard({ entry }) {
           acc[p.key] = p.default
           return acc
         }, {})
-        addItem({
-          id: crypto.randomUUID(),
-          componentKey: entry.key,
-          props: defaults,
-          layoutHint: 'full',
-        })
+        if (pendingSwapSlotId) {
+          // Swap mode — replace the pending slot's component
+          swapSlotComponent(pendingSwapSlotId, entry.key, defaults)
+          closeBrowser()
+        } else {
+          // Normal add — create a free-floating item
+          addItem({
+            id: crypto.randomUUID(),
+            componentKey: entry.key,
+            props: defaults,
+            layoutHint: 'full',
+            sectionId: '',
+            slotType: browserSlotFilter ?? 'free',
+            slotPosition: DEFAULT_SLOT_POSITIONS[browserSlotFilter ?? 'free'] ?? {},
+            visible: true,
+          })
+        }
       }}
     >
       <GripVertical size={14} className="text-[#71717A] mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -62,15 +77,22 @@ function ComponentCard({ entry }) {
 // ── Main panel ─────────────────────────────────────────────────────────────────
 
 export default function ComponentBrowser() {
-  const closeBrowser = usePlaygroundStore((s) => s.closeBrowser)
+  const closeBrowser      = usePlaygroundStore((s) => s.closeBrowser)
+  const browserSlotFilter = usePlaygroundStore((s) => s.browserSlotFilter)
+  const pendingSwapSlotId = usePlaygroundStore((s) => s.pendingSwapSlotId)
   const [query, setQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
 
   const categories = ['all', ...CATEGORY_ORDER]
 
+  // Allowed categories when slot filter active
+  const allowedCats = browserSlotFilter ? (SLOT_CATEGORY_HINTS[browserSlotFilter] ?? null) : null
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim()
     return REGISTRY.filter((c) => {
+      // Slot filter — only show compatible categories
+      if (allowedCats && !allowedCats.includes(c.category)) return false
       const matchCat = activeCategory === 'all' || c.category === activeCategory
       if (!matchCat) return false
       if (!q) return true
@@ -80,7 +102,7 @@ export default function ComponentBrowser() {
         c.tags.some((t) => t.includes(q))
       )
     })
-  }, [query, activeCategory])
+  }, [query, activeCategory, allowedCats])
 
   return (
     <motion.div
@@ -92,7 +114,17 @@ export default function ComponentBrowser() {
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#3F3F46]">
-        <span className="text-sm font-semibold text-[#FAFAFA]">Components</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[#FAFAFA]">
+            {pendingSwapSlotId ? 'Swap Component' : 'Components'}
+          </span>
+          {browserSlotFilter && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-[#5227FF]/20 text-[#B17BFF] border border-[#5227FF]/40">
+              <Filter size={9} />
+              {browserSlotFilter}
+            </span>
+          )}
+        </div>
         <button
           onClick={closeBrowser}
           className="text-[#71717A] hover:text-[#FAFAFA] transition-colors"

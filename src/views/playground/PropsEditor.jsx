@@ -33,6 +33,24 @@ function ColorControl({ schema, value, onChange }) {
   )
 }
 
+// Edits a string[] as a comma-separated list of hex colors
+function ColorListControl({ value, onChange }) {
+  const str = Array.isArray(value) ? value.join(', ') : String(value)
+  return (
+    <input
+      type="text"
+      value={str}
+      onChange={(e) => {
+        const arr = e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+        onChange(arr)
+      }}
+      className="w-full px-2 py-1.5 bg-[#111113] border border-[#3F3F46] rounded text-xs text-[#FAFAFA] font-mono outline-none focus:border-[#5227FF]/60"
+      placeholder="#111, #222, #333"
+      spellCheck={false}
+    />
+  )
+}
+
 function NumberControl({ schema, value, onChange }) {
   return (
     <div className="flex items-center gap-2">
@@ -98,6 +116,9 @@ function PropRow({ schema, value, onChange }) {
       <label className="text-xs text-[#A1A1AA]">{schema.label}</label>
       {schema.type === 'color' && (
         <ColorControl schema={schema} value={String(value ?? schema.default)} onChange={onChange} />
+      )}
+      {schema.type === 'color-list' && (
+        <ColorListControl value={value ?? schema.default} onChange={onChange} />
       )}
       {schema.type === 'number' && (
         <NumberControl schema={schema} value={Number(value ?? schema.default)} onChange={onChange} />

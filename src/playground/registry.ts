@@ -2,13 +2,13 @@
 // Each entry defines the component's metadata, configurable props (propSchema),
 // and how to map Brand DNA fields to those props (brandDNAMapping).
 
-export type PropType = 'color' | 'string' | 'number' | 'boolean' | 'enum'
+export type PropType = 'color' | 'color-list' | 'string' | 'number' | 'boolean' | 'enum'
 
 export interface PropSchema {
   key: string
   label: string
   type: PropType
-  default: string | number | boolean
+  default: string | number | boolean | string[]
   options?: string[]        // for enum
   min?: number              // for number
   max?: number              // for number
@@ -44,7 +44,7 @@ export const REGISTRY: ComponentEntry[] = [
     tags: ['premium', 'dark', 'modern', 'luxury', 'bold'],
     brandDNAMapping: { primaryColor: 'colorStops', accentColor: 'colorStops' },
     propSchema: [
-      { key: 'colorStops', label: 'Colors', type: 'string', default: '#5227FF,#00D4FF,#5227FF', featured: true },
+      { key: 'colorStops', label: 'Colors', type: 'color-list', default: ['#5227FF', '#00D4FF', '#5227FF'], featured: true },
       { key: 'amplitude', label: 'Amplitude', type: 'number', default: 1, min: 0, max: 3, step: 0.1, featured: true },
       { key: 'blend', label: 'Blend', type: 'number', default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'speed', label: 'Speed', type: 'number', default: 0.5, min: 0, max: 2, step: 0.1 },
@@ -171,7 +171,7 @@ export const REGISTRY: ComponentEntry[] = [
     tags: ['dark', 'technical', 'hacker', 'glitch', 'futuristic'],
     brandDNAMapping: { accentColor: 'glitchColors' },
     propSchema: [
-      { key: 'glitchColors', label: 'Glitch Colors', type: 'string', default: '#2b4539,#61dca3,#61b3dc', featured: true },
+      { key: 'glitchColors', label: 'Glitch Colors', type: 'color-list', default: ['#2b4539', '#61dca3', '#61b3dc'], featured: true },
       { key: 'smooth', label: 'Smooth', type: 'boolean', default: true, featured: true },
       { key: 'speed', label: 'Speed', type: 'number', default: 0.2, min: 0.05, max: 1, step: 0.05 },
     ],

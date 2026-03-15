@@ -161,8 +161,28 @@ function buildSlotApp(
   const deps: Record<string, string> = {}
   const imports: string[] = []
   const seenComponents = new Set<string>()
+  const DEFAULT_LOGO_ITEMS = ['Acme', 'Vertex', 'Nimbus', 'Orbit', 'Pulse', 'Flux']
 
-  const visibleItems = items.filter((i) => i.visible !== false && i.componentKey && registries[i.componentKey])
+  const visibleItems = items
+    .filter((i) => i.visible !== false && i.componentKey && registries[i.componentKey])
+    .map((i) => {
+      if (i.componentKey !== 'logo-loop') return i
+
+      const logos = i.props?.logos
+      const safeLogos = Array.isArray(logos) && logos.length > 0
+        ? logos
+        : typeof logos === 'string' && logos.trim()
+          ? logos.split(',').map((s) => s.trim()).filter(Boolean)
+          : DEFAULT_LOGO_ITEMS
+
+      return {
+        ...i,
+        props: {
+          ...i.props,
+          logos: safeLogos,
+        },
+      }
+    })
 
   for (const item of visibleItems) {
     const json = registries[item.componentKey]
@@ -468,6 +488,7 @@ function buildFlatApp(
   const seenPaths  = new Set<string>()
   let   allSource  = ''
   const deps: Record<string, string> = {}
+  const DEFAULT_LOGO_ITEMS = ['Acme', 'Vertex', 'Nimbus', 'Orbit', 'Pulse', 'Flux']
 
   for (const json of Object.values(registries)) {
     for (const file of json.files) {
@@ -482,7 +503,27 @@ function buildFlatApp(
 
   Object.assign(deps, extractDeps(allSource))
 
-  const sorted    = [...items].filter((i) => i.visible !== false).sort((a, b) => a.order - b.order)
+  const sorted = [...items]
+    .filter((i) => i.visible !== false)
+    .map((i) => {
+      if (i.componentKey !== 'logo-loop') return i
+
+      const logos = i.props?.logos
+      const safeLogos = Array.isArray(logos) && logos.length > 0
+        ? logos
+        : typeof logos === 'string' && logos.trim()
+          ? logos.split(',').map((s) => s.trim()).filter(Boolean)
+          : DEFAULT_LOGO_ITEMS
+
+      return {
+        ...i,
+        props: {
+          ...i.props,
+          logos: safeLogos,
+        },
+      }
+    })
+    .sort((a, b) => a.order - b.order)
   const imports: string[] = []
   const jsxRows: string[] = []
   let   halfBuffer = ''

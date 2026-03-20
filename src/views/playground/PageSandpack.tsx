@@ -11,6 +11,9 @@
  *  - Flat mode:  fallback for manually assembled canvases with no sections —
  *    renders items stacked in a flex column.
  *
+ * The generated page uses Brand DNA values (colors, fonts) stored on each
+ * CanvasSection as CSS custom properties and Google Fonts imports.
+ *
  * Rebuilds are debounced (800 ms) so rapid prop changes don't thrash Sandpack.
  */
 
@@ -72,22 +75,17 @@ const PINNED_VERSIONS: Record<string, string> = {
 }
 
 // ── Dynamically extract all third-party package names from source ────────────
-// Parses every `from 'pkg'` / `import 'pkg'` statement and resolves the
-// package name (strips subpaths, handles scoped @org/pkg names).
-// Unknown packages fall back to 'latest' so Sandpack can still resolve them.
 
 function extractDeps(allSource: string): Record<string, string> {
   const deps: Record<string, string> = {}
   const seen = new Set<string>()
-  // Matches both:  from 'pkg'  and  import 'pkg'
   const re = /(?:from|import)\s+['"]([^./'"][^'"]*)['"]/g
   let m: RegExpExecArray | null
   while ((m = re.exec(allSource)) !== null) {
     const raw = m[1]
-    // Resolve package name: strip subpath, keep scope
     let pkg = raw.startsWith('@')
-      ? raw.split('/').slice(0, 2).join('/')   // @org/pkg(/sub) → @org/pkg
-      : raw.split('/')[0]                       // pkg(/sub)       → pkg
+      ? raw.split('/').slice(0, 2).join('/')
+      : raw.split('/')[0]
     if (!pkg || pkg === 'react' || pkg === 'react-dom') continue
     if (seen.has(pkg)) continue
     seen.add(pkg)
@@ -139,6 +137,88 @@ function slotPosToStyle(pos: SlotPosition, zIndex: number): string {
   return `{ ${parts.join(', ')} }`
 }
 
+const DEFAULT_LOGO_ITEMS: Record<string, unknown>[] = [
+  { node: 'Acme' },
+  { node: 'Vertex' },
+  { node: 'Nimbus' },
+  { node: 'Orbit' },
+  { node: 'Pulse' },
+  { node: 'Flux' },
+]
+
+function normalizeLogoItems(logos: unknown): Record<string, unknown>[] {
+  const toNodeItem = (label: string): Record<string, unknown> => ({ node: label })
+
+  if (Array.isArray(logos)) {
+    const normalized = logos
+      .map((item) => {
+        if (typeof item === 'string') {
+          const value = item.trim()
+          return value ? toNodeItem(value) : null
+        }
+        if (!item || typeof item !== 'object') return null
+
+        const obj = item as Record<string, unknown>
+        if (typeof obj.node === 'string' && obj.node.trim()) {
+          return { ...obj, node: obj.node.trim() }
+        }
+        if (typeof obj.src === 'string' && obj.src.trim()) {
+          const trimmedSrc = obj.src.trim()
+          const alt = typeof obj.alt === 'string' && obj.alt.trim() ? obj.alt.trim() : 'Logo'
+          return { ...obj, src: trimmedSrc, alt }
+        }
+        if (typeof obj.name === 'string' && obj.name.trim()) {
+          return toNodeItem(obj.name.trim())
+        }
+        if (typeof obj.title === 'string' && obj.title.trim()) {
+          return toNodeItem(obj.title.trim())
+        }
+        return null
+      })
+      .filter((item): item is Record<string, unknown> => item !== null)
+
+    return normalized.length > 0 ? normalized : DEFAULT_LOGO_ITEMS
+  }
+
+  if (typeof logos === 'string' && logos.trim()) {
+    const parsed = logos
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(toNodeItem)
+    return parsed.length > 0 ? parsed : DEFAULT_LOGO_ITEMS
+  }
+
+  return DEFAULT_LOGO_ITEMS
+}
+
+// ── Background luminance + adaptive theme helpers ─────────────────────────────
+
+function bgLuminance(hex: string): number {
+  const c = hex.replace('#', '').padEnd(6, '0')
+  const toLinear = (v: number) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  const r = toLinear(parseInt(c.slice(0, 2), 16) / 255)
+  const g = toLinear(parseInt(c.slice(2, 4), 16) / 255)
+  const b = toLinear(parseInt(c.slice(4, 6), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+function getTheme(brandBg: string) {
+  const isLight = bgLuminance(brandBg) > 0.35
+  return {
+    textHigh    : isLight ? '#09090B'              : 'rgba(255,255,255,1)',
+    textMid     : isLight ? 'rgba(0,0,0,0.65)'     : 'rgba(255,255,255,0.9)',
+    textLow     : isLight ? 'rgba(0,0,0,0.4)'      : 'rgba(255,255,255,0.5)',
+    textSubtle  : isLight ? 'rgba(0,0,0,0.3)'      : 'rgba(255,255,255,0.3)',
+    navBg       : isLight ? 'rgba(255,255,255,0.75)': 'rgba(0,0,0,0.25)',
+    navBorder   : isLight ? 'rgba(0,0,0,0.08)'     : 'rgba(255,255,255,0.06)',
+    btnSecBg    : isLight ? 'rgba(0,0,0,0.06)'     : 'rgba(255,255,255,0.06)',
+    btnSecColor : isLight ? 'rgba(0,0,0,0.75)'     : 'rgba(255,255,255,0.85)',
+    btnSecBorder: isLight ? 'rgba(0,0,0,0.15)'     : 'rgba(255,255,255,0.18)',
+    navSecColor : isLight ? 'rgba(0,0,0,0.5)'      : 'rgba(255,255,255,0.65)',
+  }
+}
+
 // ── Text animation component keys that need a mount guard ───────────────────
 const TEXT_ANIM_KEYS = new Set([
   'blur-text', 'split-text', 'shiny-text', 'gradient-text', 'rotating-text',
@@ -146,9 +226,55 @@ const TEXT_ANIM_KEYS = new Set([
   'fade-content', 'count-up', 'counter',
 ])
 
+// ── Brand CSS + Google Fonts injector ─────────────────────────────────────────
+// Produces the full index.css content with :root variables and font imports
+
+function buildBrandCSS(sections: CanvasSection[]): string {
+  // Extract brand values from the first section that has them
+  const src = sections.find((s) => s.brandAccent || s.brandPrimary) ?? sections[0]
+
+  const brandBg         = src?.brandBg          ?? '#09090B'
+  const brandPrimary    = src?.brandPrimary      ?? '#18181B'
+  const brandAccent     = src?.brandAccent       ?? '#A78BFA'
+  const brandFontHead   = src?.brandFontHeading  ?? 'Inter'
+  const brandFontBody   = src?.brandFontBody     ?? 'Inter'
+
+  // Build Google Fonts URL — deduplicate if heading = body
+  const fonts: string[] = []
+  const headSlug = brandFontHead.replace(/\s+/g, '+')
+  const bodySlug = brandFontBody.replace(/\s+/g, '+')
+  fonts.push(`family=${headSlug}:wght@300;400;600;700;800;900`)
+  if (brandFontBody !== brandFontHead) {
+    fonts.push(`family=${bodySlug}:wght@300;400;500;600`)
+  }
+  const fontUrl = `https://fonts.googleapis.com/css2?${fonts.join('&')}&display=swap`
+
+  return `@import url('${fontUrl}');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-bg: ${brandBg};
+  --brand-primary: ${brandPrimary};
+  --brand-accent: ${brandAccent};
+  --brand-accent-glow: ${brandAccent}55;
+  --brand-font-heading: '${brandFontHead}', system-ui, sans-serif;
+  --brand-font-body: '${brandFontBody}', system-ui, sans-serif;
+}
+
+*  { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--brand-bg);
+  font-family: var(--brand-font-body);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--brand-font-heading); }
+`
+}
+
 // ── Slot-mode App.tsx builder ─────────────────────────────────────────────────
-// Generates a real webpage scaffold: nav + hero headline/sub + subtitle paragraph
-// + CTA buttons ON TOP OF a background component, not floating next to it.
 
 function buildSlotApp(
   items: CanvasItem[],
@@ -161,27 +287,12 @@ function buildSlotApp(
   const deps: Record<string, string> = {}
   const imports: string[] = []
   const seenComponents = new Set<string>()
-  const DEFAULT_LOGO_ITEMS = ['Acme', 'Vertex', 'Nimbus', 'Orbit', 'Pulse', 'Flux']
 
   const visibleItems = items
     .filter((i) => i.visible !== false && i.componentKey && registries[i.componentKey])
     .map((i) => {
       if (i.componentKey !== 'logo-loop') return i
-
-      const logos = i.props?.logos
-      const safeLogos = Array.isArray(logos) && logos.length > 0
-        ? logos
-        : typeof logos === 'string' && logos.trim()
-          ? logos.split(',').map((s) => s.trim()).filter(Boolean)
-          : DEFAULT_LOGO_ITEMS
-
-      return {
-        ...i,
-        props: {
-          ...i.props,
-          logos: safeLogos,
-        },
-      }
+      return { ...i, props: { ...i.props, logos: normalizeLogoItems(i.props?.logos) } }
     })
 
   for (const item of visibleItems) {
@@ -219,8 +330,17 @@ function buildSlotApp(
     bySection.set(item.sectionId, arr)
   }
 
+  // ── Extract brand values from first section ────────────────────────────────
+  const firstSec   = sections[0]
+  const brandAccent = firstSec?.brandAccent     ?? '#A78BFA'
+  const brandFontH  = firstSec?.brandFontHeading ?? 'Inter'
+  const brandBg     = firstSec?.brandBg         ?? '#09090B'
+
   // ── Single fixed background — spans the full page ─────────────────────────
   const bgItem = visibleItems.find((i) => i.slotType === 'background')
+  // If a dark background component is present (aurora, beams, etc.), the visual
+  // background is always dark regardless of brandBg — force light text.
+  const theme       = bgItem ? getTheme('#09090B') : getTheme(brandBg)
   const fixedBgJsx = bgItem ? [
     `      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', zIndex: 0, pointerEvents: 'none' }}>`,
     `        <${toPascalCase(bgItem.componentKey)}`,
@@ -234,11 +354,9 @@ function buildSlotApp(
 
   for (const section of sortedSections) {
     const allSectionItems = bySection.get(section.id) ?? []
-    // Strip background slot — it's rendered as the page-level fixed layer above
     const sectionItems = allSectionItems.filter((i) => i.slotType !== 'background')
     if (sectionItems.length === 0) continue
 
-    // Categorise items by slot role
     const navItem      = sectionItems.find((i) => i.slotType === 'nav')
     const headlineItem = sectionItems.find((i) => i.slotType === 'hero-headline')
     const subItem      = sectionItems.find((i) => i.slotType === 'hero-sub')
@@ -249,14 +367,16 @@ function buildSlotApp(
     )
     const isHero = !!(headlineItem ?? subItem)
 
-    // Scaffold text from section metadata (populated by fill-template AI)
-    const brandName    = section.brandName    ?? 'Your Brand'
-    const subtitle     = section.subtitle     ?? ''
-    const ctaPrimary   = section.ctaPrimary   ?? 'Get Started'
+    // Per-section brand values (fall back to first-section values)
+    const secAccent   = section.brandAccent     ?? brandAccent
+    const secFontH    = section.brandFontHeading ?? brandFontH
+    const brandName   = section.brandName   ?? 'Your Brand'
+    const subtitle    = section.subtitle    ?? ''
+    const ctaPrimary  = section.ctaPrimary  ?? 'Get Started'
     const ctaSecondary = section.ctaSecondary ?? 'See how it works'
 
     if (isHero) {
-      // ── Nav bar ─────────────────────────────────────────────────────────
+      // ── Nav bar ──────────────────────────────────────────────────────────
       const navLayer = navItem ? [
         `        <div className="absolute top-0 left-0 right-0 z-20">`,
         `          <${toPascalCase(navItem.componentKey)}`,
@@ -264,9 +384,12 @@ function buildSlotApp(
         `          />`,
         `        </div>`,
       ].join('\n') : [
-        `        <nav className="absolute top-0 left-0 right-0 flex justify-between items-center px-8 py-5 z-20">`,
-        `          <span className="font-bold text-white text-lg tracking-tight">${brandName}</span>`,
-        `          <button className="text-white/60 hover:text-white text-sm transition-colors">${ctaPrimary} →</button>`,
+        `        <nav style={{ position:'absolute', top:0, left:0, right:0, zIndex:20, display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1.25rem 2.5rem', background:'${theme.navBg}', backdropFilter:'blur(12px)', borderBottom:'1px solid ${theme.navBorder}' }}>`,
+        `          <span style={{ fontFamily:'var(--brand-font-heading)', fontWeight:800, fontSize:'1.125rem', color:'${theme.textHigh}', letterSpacing:'-0.02em' }}>${brandName}</span>`,
+        `          <div style={{ display:'flex', gap:'0.75rem', alignItems:'center' }}>`,
+        `            <button style={{ background:'transparent', color:'${theme.navSecColor}', fontSize:'0.875rem', border:'none', cursor:'pointer', padding:'0.5rem 1rem' }}>${ctaSecondary}</button>`,
+        `            <button style={{ background:'${secAccent}', color:'white', fontSize:'0.875rem', fontWeight:600, border:'none', cursor:'pointer', padding:'0.625rem 1.25rem', borderRadius:'9999px', boxShadow:'0 0 20px ${secAccent}44' }}>${ctaPrimary}</button>`,
+        `          </div>`,
         `        </nav>`,
       ].join('\n')
 
@@ -275,25 +398,27 @@ function buildSlotApp(
       const headlineJsx = headlineItem ? [
         `            {mounted ? (`,
         `              <${toPascalCase(headlineItem.componentKey)}`,
-        `                className="text-6xl font-black text-white leading-none"`,
+        `                className="text-6xl font-black leading-none"`,
+        `                style={{ color:'${theme.textHigh}' }}`,
         `                ${serializeProps(headlineItem.props)}`,
         `              />`,
         `            ) : (`,
-        `              <span style={{ fontSize: '3.75rem', fontWeight: 900, color: 'white', opacity: 0 }}>${headlineFallback}</span>`,
+        `              <span style={{ fontSize: '3.75rem', fontWeight: 900, color: '${theme.textHigh}', opacity: 0 }}>${headlineFallback}</span>`,
         `            )}`,
       ].join('\n') : ''
 
       // ── Sub text ReactBits accent ────────────────────────────────────────
       const subFallback = subtitle || brandName
       const subJsx = subItem ? [
-        `            <div className="text-2xl text-white/90">`,
+        `            <div style={{ fontSize:'1.5rem', color:'${theme.textMid}' }}>`,
         `              {mounted ? (`,
         `                <${toPascalCase(subItem.componentKey)}`,
-        `                  className="text-2xl font-medium text-white/90"`,
+        `                  className="text-2xl font-medium"`,
+        `                  style={{ color:'${theme.textMid}' }}`,
         `                  ${serializeProps(subItem.props)}`,
         `                />`,
         `              ) : (`,
-        `                <span style={{ fontSize: '1.5rem', color: 'rgba(255,255,255,0.9)', opacity: 0 }}>${subFallback}</span>`,
+        `                <span style={{ fontSize:'1.5rem', color:'${theme.textMid}', opacity:0 }}>${subFallback}</span>`,
         `              )}`,
         `            </div>`,
       ].join('\n') : ''
@@ -301,7 +426,7 @@ function buildSlotApp(
       // ── Counter row (stays inside hero) ─────────────────────────────────
       const counterItems = contentItems.filter((i) => i.slotType === 'counter-row')
       const counterJsx = counterItems.length > 0 ? [
-        `            <div className="w-full max-w-3xl mt-4">`,
+        `            <div style={{ width:'100%', maxWidth:'48rem', marginTop:'1rem' }}>`,
         ...counterItems.map((i) => [
           `              <${toPascalCase(i.componentKey)}`,
           `                ${serializeProps(i.props)}`,
@@ -310,9 +435,9 @@ function buildSlotApp(
         `            </div>`,
       ].join('\n') : ''
 
-      // ── Logo strip anchored to bottom (legacy slot) ────────────────────────
+      // ── Logo strip anchored to bottom ────────────────────────────────────
       const logoJsx = logoItem ? [
-        `        <div className="absolute bottom-0 left-0 right-0 z-10 pb-2">`,
+        `        <div style={{ position:'absolute', bottom:0, left:0, right:0, zIndex:10, paddingBottom:'0.5rem' }}>`,
         `          <${toPascalCase(logoItem.componentKey)}`,
         `            ${serializeProps(logoItem.props)}`,
         `          />`,
@@ -327,23 +452,23 @@ function buildSlotApp(
           ? `{mounted ? <${accentCn} ${accentPs} /> : <span style={{opacity:0}}>...</span>}`
           : `<${accentCn} ${accentPs} />`
         return [
-          `            <div style={{ width:'100%', display:'flex', justifyContent:'center', marginTop:'0.5rem' }}>`,
+          `            <div style={{ width:'100%', display:'flex', justifyContent:'center', marginTop:'0.75rem' }}>`,
           `              ${inner}`,
           `            </div>`,
         ].join('\n')
       })() : ''
 
       sectionJsx.push([
-        `        <section style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '${section.heightVh}vh', background: 'transparent', margin: 0, border: 'none' }}>`,
+        `        <section style={{ position:'relative', display:'flex', flexDirection:'column', height:'${section.heightVh}vh', background:'transparent', margin:0, border:'none', overflow:'hidden' }}>`,
         navLayer,
         logoJsx,
-        `          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', maxWidth:'56rem', margin:'0 auto', padding:'0 2rem', gap:'1.5rem' }}>`,
+        `          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', maxWidth:'58rem', margin:'0 auto', padding:'0 2.5rem', gap:'1.75rem' }}>`,
         headlineJsx,
         subJsx,
-        subtitle ? `            <p style={{ fontSize:'1.25rem', color:'rgba(255,255,255,0.6)', lineHeight:1.6, maxWidth:'42rem' }}>${subtitle}</p>` : '',
-        `            <div style={{ display:'flex', flexWrap:'wrap', gap:'1rem', justifyContent:'center', paddingTop:'0.5rem' }}>`,
-        `              <button style={{ background:'white', color:'black', padding:'0.75rem 2rem', borderRadius:'9999px', fontWeight:600, fontSize:'0.875rem', border:'none', cursor:'pointer' }}>${ctaPrimary}</button>`,
-        `              <button style={{ background:'transparent', color:'rgba(255,255,255,0.8)', padding:'0.75rem 2rem', borderRadius:'9999px', fontSize:'0.875rem', border:'1px solid rgba(255,255,255,0.2)', cursor:'pointer' }}>${ctaSecondary}</button>`,
+        subtitle ? `            <p style={{ fontSize:'1.2rem', color:'${theme.textLow}', lineHeight:1.65, maxWidth:'44rem', fontFamily:'var(--brand-font-body)' }}>${subtitle}</p>` : '',
+        `            <div style={{ display:'flex', flexWrap:'wrap', gap:'0.875rem', justifyContent:'center', paddingTop:'0.25rem' }}>`,
+        `              <button style={{ background:'${secAccent}', color:'white', padding:'0.875rem 2.25rem', borderRadius:'9999px', fontWeight:700, fontSize:'0.9rem', border:'none', cursor:'pointer', boxShadow:'0 0 28px ${secAccent}50', fontFamily:'var(--brand-font-body)', letterSpacing:'0.01em' }}>${ctaPrimary}</button>`,
+        `              <button style={{ background:'${theme.btnSecBg}', color:'${theme.btnSecColor}', padding:'0.875rem 2.25rem', borderRadius:'9999px', fontSize:'0.9rem', border:'1px solid ${theme.btnSecBorder}', cursor:'pointer', fontFamily:'var(--brand-font-body)', backdropFilter:'blur(4px)' }}>${ctaSecondary}</button>`,
         `            </div>`,
         accentJsx,
         counterJsx,
@@ -352,14 +477,22 @@ function buildSlotApp(
       ].filter(Boolean).join('\n'))
 
     } else {
-      // ── Content section — typed scaffold per slot role ───────────────────
+      // ── Content section ────────────────────────────────────────────────────
       const isCounterSection = contentItems.some((i) => i.slotType === 'counter-row')
       const isCtaSection     = contentItems.some((i) => i.slotType === 'feature-text' || i.slotType === 'cta')
+
+      // Section heading row — shown above every non-hero section
+      const sectionHeading = [
+        `            <div style={{ textAlign:'center', paddingBottom:'1rem' }}>`,
+        `              <p style={{ fontSize:'0.65rem', letterSpacing:'0.3em', textTransform:'uppercase', color:'${theme.textSubtle}', fontFamily:'var(--brand-font-body)', marginBottom:'0.75rem' }}>${section.label.toUpperCase()}</p>`,
+        `              <h2 style={{ fontSize:'clamp(2rem, 5vw, 3rem)', fontWeight:800, color:'${theme.textHigh}', fontFamily:'var(--brand-font-heading)', lineHeight:1.1, letterSpacing:'-0.02em' }}>${brandName}</h2>`,
+        subtitle ? `              <p style={{ fontSize:'1.05rem', color:'${theme.textLow}', maxWidth:'36rem', margin:'0.875rem auto 0', lineHeight:1.65, fontFamily:'var(--brand-font-body)' }}>${subtitle}</p>` : '',
+        `            </div>`,
+      ].filter(Boolean).join('\n')
 
       let innerContent = ''
 
       if (isCounterSection) {
-        // Stats grid — each counter gets a centered block with a label
         const statJsx = contentItems
           .filter((i) => i.slotType === 'counter-row')
           .map((i) => {
@@ -370,8 +503,8 @@ function buildSlotApp(
               : `<${cn} ${ps} />`
             return [
               `              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'0.5rem', padding:'0 2rem' }}>`,
-              `                <div style={{ fontSize:'4rem', fontWeight:900, color:'white', lineHeight:1 }}>${numJsx}</div>`,
-              `                <div style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.2em' }}>${section.label}</div>`,
+              `                <div style={{ fontSize:'4rem', fontWeight:900, color:'${theme.textHigh}', lineHeight:1, fontFamily:'var(--brand-font-heading)' }}>${numJsx}</div>`,
+              `                <div style={{ fontSize:'0.7rem', color:'${theme.textSubtle}', textTransform:'uppercase', letterSpacing:'0.25em', fontFamily:'var(--brand-font-body)' }}>${section.label}</div>`,
               `              </div>`,
             ].join('\n')
           }).join('\n')
@@ -383,7 +516,6 @@ function buildSlotApp(
         ].join('\n')
 
       } else if (isCtaSection) {
-        // CTA block — animated text accent + description + buttons in HTML
         const ctaCompJsx = contentItems
           .filter((i) => i.slotType === 'feature-text' || i.slotType === 'cta')
           .map((i) => {
@@ -396,32 +528,32 @@ function buildSlotApp(
           }).join('\n              ')
 
         innerContent = [
-          `            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'2rem', width:'100%', maxWidth:'48rem', margin:'0 auto', textAlign:'center', padding:'2rem 0' }}>`,
-          `              <div style={{ fontSize:'3rem', fontWeight:900, color:'white', lineHeight:1.1 }}>`,
+          `            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'2rem', width:'100%', maxWidth:'48rem', margin:'0 auto', textAlign:'center', padding:'1rem 0' }}>`,
+          `              <div style={{ fontSize:'clamp(2rem, 4vw, 3.25rem)', fontWeight:900, color:'white', lineHeight:1.1, fontFamily:'var(--brand-font-heading)' }}>`,
           `                ${ctaCompJsx}`,
           `              </div>`,
-          subtitle ? `              <p style={{ fontSize:'1.125rem', color:'rgba(255,255,255,0.55)', maxWidth:'36rem' }}>${subtitle}</p>` : '',
-          `              <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', justifyContent:'center' }}>`,
-          `                <button style={{ background:'white', color:'black', padding:'0.875rem 2.5rem', borderRadius:'9999px', fontWeight:600, fontSize:'0.875rem', border:'none', cursor:'pointer' }}>${ctaPrimary}</button>`,
-          `                <button style={{ background:'transparent', color:'rgba(255,255,255,0.75)', padding:'0.875rem 2.5rem', borderRadius:'9999px', fontSize:'0.875rem', border:'1px solid rgba(255,255,255,0.2)', cursor:'pointer' }}>${ctaSecondary}</button>`,
+          subtitle ? `              <p style={{ fontSize:'1.1rem', color:'${theme.textLow}', maxWidth:'36rem', fontFamily:'var(--brand-font-body)', lineHeight:1.65 }}>${subtitle}</p>` : '',
+          `              <div style={{ display:'flex', gap:'0.875rem', flexWrap:'wrap', justifyContent:'center' }}>`,
+          `                <button style={{ background:'${secAccent}', color:'white', padding:'0.875rem 2.5rem', borderRadius:'9999px', fontWeight:700, fontSize:'0.9rem', border:'none', cursor:'pointer', boxShadow:'0 0 28px ${secAccent}50', fontFamily:'var(--brand-font-body)' }}>${ctaPrimary}</button>`,
+          `                <button style={{ background:'${theme.btnSecBg}', color:'${theme.btnSecColor}', padding:'0.875rem 2.5rem', borderRadius:'9999px', fontSize:'0.9rem', border:'1px solid ${theme.btnSecBorder}', cursor:'pointer', fontFamily:'var(--brand-font-body)', backdropFilter:'blur(4px)' }}>${ctaSecondary}</button>`,
           `              </div>`,
           `            </div>`,
         ].filter(Boolean).join('\n')
 
       } else {
-        // Card grid / gallery / free — give each component a min-height container
+        // Card grid / gallery / free
         innerContent = contentItems.map((i) => {
           const cn = toPascalCase(i.componentKey)
           const ps = serializeProps(i.props)
           if (TEXT_ANIM_KEYS.has(i.componentKey)) {
             return [
-              `            <div style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', minHeight:'12rem' }}>`,
+              `            <div style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', minHeight:'10rem' }}>`,
               `              {mounted ? <${cn} ${ps} /> : null}`,
               `            </div>`,
             ].join('\n')
           }
           return [
-            `            <div style={{ width:'100%', minHeight:'32rem', overflow:'hidden' }}>`,
+            `            <div style={{ width:'100%', minHeight:'30rem', overflow:'hidden', borderRadius:'1rem' }}>`,
             `              <${cn}`,
             `                ${ps}`,
             `              />`,
@@ -432,11 +564,10 @@ function buildSlotApp(
 
       sectionJsx.push([
         `        <section style={{ position:'relative', display:'flex', flexDirection:'column', minHeight:'${section.heightVh}vh', background:'transparent', margin:0, border:'none' }}>`,
-        `          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, padding:'5rem 2rem 4rem', gap:'2rem', width:'100%' }}>`,
-        `            <p style={{ fontSize:'0.7rem', letterSpacing:'0.2em', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', margin:0 }}>${section.label}</p>`,
+        `          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, padding:'5rem 2.5rem 4rem', gap:'2.5rem', width:'100%' }}>`,
+        sectionHeading,
         innerContent,
-        subtitle ? `            <p style={{ fontSize:'1rem', color:'rgba(255,255,255,0.45)', maxWidth:'38rem', textAlign:'center', lineHeight:1.65, margin:0 }}>${subtitle}</p>` : '',
-        `            <button style={{ background:'white', color:'black', padding:'0.75rem 2rem', borderRadius:'9999px', fontWeight:600, fontSize:'0.875rem', border:'none', cursor:'pointer' }}>${ctaPrimary}</button>`,
+        `            <button style={{ background:'${secAccent}', color:'white', padding:'0.75rem 2rem', borderRadius:'9999px', fontWeight:600, fontSize:'0.875rem', border:'none', cursor:'pointer', boxShadow:'0 0 20px ${secAccent}44', fontFamily:'var(--brand-font-body)', marginTop:'0.5rem', flexShrink:0 }}>${ctaPrimary}</button>`,
         `          </div>`,
         `        </section>`,
       ].filter(Boolean).join('\n'))
@@ -450,7 +581,7 @@ function buildSlotApp(
   const orphanJsx = orphans.map((item) => {
     const cn = toPascalCase(item.componentKey)
     const ps = serializeProps(item.props)
-    return `        <div className="w-full min-h-[500px] relative overflow-hidden">\n          <${cn}\n            ${ps}\n          />\n        </div>`
+    return `        <div style={{ width:'100%', minHeight:'500px', position:'relative', overflow:'hidden', borderRadius:'1rem' }}>\n          <${cn}\n            ${ps}\n          />\n        </div>`
   })
 
   const appCode = `import React from 'react'
@@ -461,11 +592,11 @@ export default function App() {
   React.useEffect(() => { setMounted(true) }, [])
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#09090B' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--brand-bg)' }}>
 ${fixedBgJsx}
       <div style={{ position: 'relative', zIndex: 1 }}>
 ${sectionJsx.join('\n')}
-${orphanJsx.length > 0 ? `        <div className="flex flex-col w-full">\n${orphanJsx.join('\n')}\n        </div>` : ''}
+${orphanJsx.length > 0 ? `        <div style={{ display:'flex', flexDirection:'column', width:'100%', gap:'2rem', padding:'2rem' }}>\n${orphanJsx.join('\n')}\n        </div>` : ''}
       </div>
     </div>
   )
@@ -474,7 +605,7 @@ ${orphanJsx.length > 0 ? `        <div className="flex flex-col w-full">\n${orph
 
   files['/App.tsx']   = { code: appCode }
   files['/index.tsx'] = { code: `import React from 'react'\nimport { createRoot } from 'react-dom/client'\nimport './index.css'\nimport App from './App'\ncreateRoot(document.getElementById('root')!).render(<App />)\n` }
-  files['/index.css'] = { code: `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n* { box-sizing: border-box; margin: 0; padding: 0; }\nhtml, body { background: #09090B; overflow-x: hidden; }\n` }
+  files['/index.css'] = { code: buildBrandCSS(sections) }
   return { files, deps }
 }
 
@@ -488,7 +619,6 @@ function buildFlatApp(
   const seenPaths  = new Set<string>()
   let   allSource  = ''
   const deps: Record<string, string> = {}
-  const DEFAULT_LOGO_ITEMS = ['Acme', 'Vertex', 'Nimbus', 'Orbit', 'Pulse', 'Flux']
 
   for (const json of Object.values(registries)) {
     for (const file of json.files) {
@@ -507,29 +637,16 @@ function buildFlatApp(
     .filter((i) => i.visible !== false)
     .map((i) => {
       if (i.componentKey !== 'logo-loop') return i
-
-      const logos = i.props?.logos
-      const safeLogos = Array.isArray(logos) && logos.length > 0
-        ? logos
-        : typeof logos === 'string' && logos.trim()
-          ? logos.split(',').map((s) => s.trim()).filter(Boolean)
-          : DEFAULT_LOGO_ITEMS
-
-      return {
-        ...i,
-        props: {
-          ...i.props,
-          logos: safeLogos,
-        },
-      }
+      return { ...i, props: { ...i.props, logos: normalizeLogoItems(i.props?.logos) } }
     })
     .sort((a, b) => a.order - b.order)
+
   const imports: string[] = []
   const jsxRows: string[] = []
   let   halfBuffer = ''
   const flushHalves = () => {
     if (!halfBuffer) return
-    jsxRows.push(`      <div className="flex flex-wrap w-full">\n${halfBuffer}      </div>`)
+    jsxRows.push(`      <div style={{ display:'flex', flexWrap:'wrap', width:'100%' }}>\n${halfBuffer}      </div>`)
     halfBuffer = ''
   }
 
@@ -546,10 +663,10 @@ function buildFlatApp(
     imports.push(`import ${varName} from './${mainFilePath.replace(/^\//, '').replace(/\.tsx?$/, '')}'`)
     const ps = serializeProps(item.props)
     if (item.layoutHint === 'half') {
-      halfBuffer += `        <div className="w-1/2 min-h-[400px] relative overflow-hidden">\n          <${varName}\n            ${ps}\n          />\n        </div>\n`
+      halfBuffer += `        <div style={{ width:'50%', minHeight:'400px', position:'relative', overflow:'hidden' }}>\n          <${varName}\n            ${ps}\n          />\n        </div>\n`
     } else {
       flushHalves()
-      jsxRows.push(`      <div className="w-full min-h-[500px] relative overflow-hidden">\n        <${varName}\n          ${ps}\n        />\n      </div>`)
+      jsxRows.push(`      <div style={{ width:'100%', minHeight:'500px', position:'relative', overflow:'hidden', borderRadius:'1rem' }}>\n        <${varName}\n          ${ps}\n        />\n      </div>`)
     }
   }
   flushHalves()
@@ -559,7 +676,7 @@ ${imports.join('\n')}
 
 export default function App() {
   return (
-    <div className="flex flex-col w-full min-h-screen bg-[#09090B]">
+    <div style={{ display:'flex', flexDirection:'column', width:'100%', minHeight:'100vh', background:'var(--brand-bg)', gap:'2rem', padding:'2rem' }}>
 ${jsxRows.join('\n')}
     </div>
   )
@@ -567,7 +684,7 @@ ${jsxRows.join('\n')}
 `
   files['/App.tsx']   = { code: appCode }
   files['/index.tsx'] = { code: `import React from 'react'\nimport { createRoot } from 'react-dom/client'\nimport './index.css'\nimport App from './App'\ncreateRoot(document.getElementById('root')!).render(<App />)\n` }
-  files['/index.css'] = { code: `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n* { box-sizing: border-box; }\nbody { margin: 0; background: #09090B; }\n` }
+  files['/index.css'] = { code: `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n:root {\n  --brand-bg: #09090B;\n  --brand-accent: #A78BFA;\n  --brand-font-heading: 'Inter', system-ui, sans-serif;\n  --brand-font-body: 'Inter', system-ui, sans-serif;\n}\n\n* { box-sizing: border-box; margin: 0; padding: 0; }\nbody { background: var(--brand-bg); font-family: var(--brand-font-body); -webkit-font-smoothing: antialiased; }\nh1, h2, h3 { font-family: var(--brand-font-heading); }\n` }
   return { files, deps }
 }
 
@@ -616,8 +733,9 @@ export default function PageSandpack({ items, sections = [] }: PageSandpackProps
   }, [items, sections]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (hasEmptySections) {
-    // Show a wireframe skeleton so the user sees the template layout while AI fills slots
+    // Wireframe skeleton while AI fills slots
     const sortedSections = [...sections].sort((a, b) => a.order - b.order)
+    const accentColor = sections[0]?.brandAccent ?? '#A78BFA'
     return (
       <div className="relative flex-1 overflow-y-auto bg-[#09090B]">
         <div className="flex flex-col gap-0">
@@ -629,18 +747,17 @@ export default function PageSandpack({ items, sections = [] }: PageSandpackProps
                 style={{ minHeight: `${sec.heightVh}vh` }}
                 className="relative border-b border-[#3F3F46]/30 flex flex-col"
               >
-                {/* Section label */}
                 <div className="absolute top-3 left-4 text-[10px] text-[#52525B] font-mono tracking-widest uppercase">
                   {sec.label}
                 </div>
-                {/* Slot outlines */}
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8 pt-10">
                   {secItems.map((item) => (
                     <div
                       key={item.id}
-                      className="w-3/4 h-12 rounded-lg border border-dashed border-[#3F3F46] flex items-center justify-center"
+                      className="w-3/4 h-12 rounded-lg border border-dashed flex items-center justify-center"
+                      style={{ borderColor: `${accentColor}40` }}
                     >
-                      <span className="text-[11px] text-[#3F3F46] font-mono">{item.slotType}</span>
+                      <span className="text-[11px] font-mono" style={{ color: `${accentColor}80` }}>{item.slotType}</span>
                     </div>
                   ))}
                 </div>

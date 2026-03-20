@@ -30,6 +30,8 @@ export interface TemplateSection {
   slots: TemplateSlot[]
 }
 
+export type HeroLayout = 'centered' | 'left-aligned' | 'split'
+
 export interface PositionTemplate {
   id: string
   name: string
@@ -38,6 +40,10 @@ export interface PositionTemplate {
   tags: string[]
   /** Short wireframe description shown in picker */
   wireframeHint: string
+  /** Layout style for hero section content — drives buildSlotApp rendering */
+  heroLayout: HeroLayout
+  /** Accent hex used in TemplatePicker wireframe thumbnail */
+  previewAccent: string
   sections: TemplateSection[]
 }
 
@@ -64,6 +70,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'portfolio',
     tags: ['portfolio', 'creative', 'designer', 'developer'],
     wireframeHint: 'Full-screen animated hero · work gallery showcase',
+    heroLayout: 'left-aligned',
+    previewAccent: '#C084FC',
     sections: [
       {
         id: 'pf-s1',
@@ -130,6 +138,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'saas',
     tags: ['saas', 'startup', 'product', 'launch'],
     wireframeHint: 'Animated hero with logo strip · spotlight feature cards',
+    heroLayout: 'centered',
+    previewAccent: '#38BDF8',
     sections: [
       {
         id: 'saas-s1',
@@ -196,6 +206,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'agency',
     tags: ['agency', 'creative', 'marketing', 'bold', 'editorial'],
     wireframeHint: 'Bold statement hero · bento case study showcase',
+    heroLayout: 'left-aligned',
+    previewAccent: '#FB923C',
     sections: [
       {
         id: 'ag-s1',
@@ -262,6 +274,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'personal',
     tags: ['personal', 'blog', 'minimal', 'writing', 'clean'],
     wireframeHint: 'Atmospheric hero with bio · writing showcase list',
+    heroLayout: 'centered',
+    previewAccent: '#34D399',
     sections: [
       {
         id: 'pb-s1',
@@ -328,6 +342,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'startup',
     tags: ['startup', 'launch', 'energy', 'bold', 'growth'],
     wireframeHint: 'High-energy hero with investor strip · feature cards showcase',
+    heroLayout: 'centered',
+    previewAccent: '#F43F5E',
     sections: [
       {
         id: 'st-s1',
@@ -394,6 +410,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'studio',
     tags: ['studio', 'art', 'design', 'creative', 'luxury'],
     wireframeHint: 'Luxury immersive hero · circular gallery portfolio',
+    heroLayout: 'left-aligned',
+    previewAccent: '#E879F9',
     sections: [
       {
         id: 'cs-s1',
@@ -460,6 +478,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'tech',
     tags: ['developer', 'tool', 'tech', 'dark', 'minimal', 'saas'],
     wireframeHint: 'Atmospheric hero · spotlight capability cards',
+    heroLayout: 'split',
+    previewAccent: '#22D3EE',
     sections: [
       {
         id: 'dt-s1',
@@ -526,6 +546,8 @@ export const POSITION_TEMPLATES: PositionTemplate[] = [
     pageType: 'minimal',
     tags: ['minimal', 'clean', 'typography', 'elegant', 'whitespace'],
     wireframeHint: 'Clean typography hero · curated content showcase',
+    heroLayout: 'centered',
+    previewAccent: '#A8A29E',
     sections: [
       {
         id: 'mn-s1',

@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Layers,
   Dna,
-  Package,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -20,8 +19,7 @@ import { createClient } from '../../lib/supabase/client'
 const NAV_ITEMS = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/swipe-file', icon: Layers, label: 'Swipe File' },
-  { to: '/brand-dna', icon: Dna, label: 'Brand DNA' },
-  { to: '/brand-kit', icon: Package, label: 'Brand Kit' },
+  { to: '/brand-dna', icon: Dna, label: 'Brand Identity' },
   { to: '/get-inspired', icon: Sparkles, label: 'Get Inspired' },
 ]
 

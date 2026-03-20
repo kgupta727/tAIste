@@ -1,7 +1,5 @@
-'use client'
-
-import BrandKit from '@/src/views/BrandKit'
+import { redirect } from 'next/navigation'
 
 export default function BrandKitPage() {
-  return <BrandKit />
+  redirect('/brand-dna')
 }

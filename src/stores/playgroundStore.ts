@@ -47,6 +47,12 @@ export interface CanvasSection {
   subtitle?: string               // plain HTML subtitle paragraph below headline
   ctaPrimary?: string             // primary CTA button text
   ctaSecondary?: string           // secondary CTA button text
+  // Brand identity — extracted from user's Brand DNA by fill-template API
+  brandPrimary?: string           // dominant primary color hex e.g. "#1A1A2E"
+  brandAccent?: string            // accent color hex e.g. "#E94560" — used for CTAs, highlights
+  brandBg?: string                // page background hex e.g. "#09090B"
+  brandFontHeading?: string       // heading font family e.g. "Playfair Display"
+  brandFontBody?: string          // body font family e.g. "Inter"
 }
 
 export interface CanvasItem {
@@ -96,6 +102,17 @@ export const SLOT_CATEGORY_HINTS: Record<SlotType, string[]> = {
   'free'          : ['Backgrounds', 'TextAnimations', 'Animations', 'Components'],
 }
 
+// ── Snapshot model ────────────────────────────────────────────────────────────
+
+export interface CanvasSnapshot {
+  id: string
+  label: string
+  templateId: string | null
+  createdAt: string
+  items: CanvasItem[]
+  sections: CanvasSection[]
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 interface PlaygroundState {
@@ -112,6 +129,9 @@ interface PlaygroundState {
   isFilling: boolean                  // AI is filling template slots
   isDirty: boolean
   lastSaved: Date | null
+  // snapshots
+  snapshots: CanvasSnapshot[]
+  snapshotsLoading: boolean
 
   // canvas actions
   addItem: (item: Omit<CanvasItem, 'order'>) => void
@@ -139,6 +159,12 @@ interface PlaygroundState {
   setIsFilling: (v: boolean) => void
   setLastSaved: (d: Date) => void
   setIsDirty: (v: boolean) => void
+
+  // snapshots
+  fetchSnapshots: () => Promise<void>
+  saveSnapshot: (label?: string, templateId?: string) => Promise<void>
+  restoreSnapshot: (snapshot: CanvasSnapshot) => void
+  deleteSnapshot: (id: string) => Promise<void>
 }
 
 export const usePlaygroundStore = create<PlaygroundState>()(
@@ -155,6 +181,8 @@ export const usePlaygroundStore = create<PlaygroundState>()(
       isFilling: false,
       isDirty: false,
       lastSaved: null,
+      snapshots: [],
+      snapshotsLoading: false,
 
       addItem: (item) =>
         set((s) => {
@@ -269,6 +297,75 @@ export const usePlaygroundStore = create<PlaygroundState>()(
       setIsFilling: (v) => set({ isFilling: v }),
       setLastSaved: (d) => set({ lastSaved: d, isDirty: false }),
       setIsDirty: (v) => set({ isDirty: v }),
+
+      fetchSnapshots: async () => {
+        set({ snapshotsLoading: true })
+        try {
+          const res = await fetch('/api/playground/snapshots')
+          if (!res.ok) return
+          const json = await res.json()
+          const rows: Array<{ id: string; label: string; template_id: string | null; created_at: string; items: CanvasItem[]; sections: CanvasSection[] }> = json.snapshots ?? []
+          set({
+            snapshots: rows.map((r) => ({
+              id: r.id,
+              label: r.label,
+              templateId: r.template_id,
+              createdAt: r.created_at,
+              items: r.items,
+              sections: r.sections,
+            })),
+          })
+        } finally {
+          set({ snapshotsLoading: false })
+        }
+      },
+
+      saveSnapshot: async (label, templateId) => {
+        const { canvasItems, canvasSections } = get()
+        if (canvasItems.length === 0) return
+        const res = await fetch('/api/playground/snapshots', {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({
+            label     : label ?? `Snapshot ${new Date().toLocaleTimeString()}`,
+            templateId: templateId ?? null,
+            items     : canvasItems,
+            sections  : canvasSections,
+          }),
+        })
+        if (!res.ok) return
+        const json = await res.json()
+        const r = json.snapshot
+        if (r) {
+          set((s) => ({
+            snapshots: [
+              {
+                id: r.id,
+                label: r.label,
+                templateId: r.template_id ?? null,
+                createdAt: r.created_at,
+                items: canvasItems,
+                sections: canvasSections,
+              },
+              ...s.snapshots,
+            ].slice(0, 20),
+          }))
+        }
+      },
+
+      restoreSnapshot: (snapshot) => {
+        set({
+          canvasItems    : snapshot.items,
+          canvasSections : snapshot.sections,
+          selectedItemId : null,
+          isDirty        : true,
+        })
+      },
+
+      deleteSnapshot: async (id) => {
+        set((s) => ({ snapshots: s.snapshots.filter((sn) => sn.id !== id) }))
+        await fetch(`/api/playground/snapshots?id=${id}`, { method: 'DELETE' })
+      },
     }),
     { name: 'playground' }
   )

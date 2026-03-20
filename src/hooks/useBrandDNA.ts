@@ -55,13 +55,19 @@ export function useBrandDNA() {
     mutate()
   }
 
-  const reanalyzeBrandDNA = async (name?: string): Promise<{ error?: string; id?: string } | void> => {
+  const reanalyzeBrandDNA = async (
+    name?: string,
+    folderIds?: string[],
+  ): Promise<{ error?: string; id?: string } | void> => {
     setIsReanalyzing(true)
     try {
       const res = await fetch('/api/analyze/brand-dna', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({
+          name,
+          ...(folderIds && folderIds.length > 0 ? { folderIds } : {}),
+        }),
       })
       const result = await res.json()
       if (!res.ok) return { error: result.error ?? 'Analysis failed' }

@@ -1,108 +1,152 @@
 'use client'
 
 /**
- * ComponentBrowser — left panel slide-over showing all ReactBits components
- * organised by category, filterable by search, draggable onto the canvas.
+ * ComponentBrowser — slide-over panel showing all approved ReactBits components
+ * organised into 5 collapsible sections that match APPROVED_COMPONENTS exactly.
+ *
+ * Swap mode: only the category matching the component being replaced is shown.
+ *   A text component can only swap with another text component.
+ *   A card with a card. Never cross-category.
+ *
+ * Browse mode: all 5 sections visible.
+ *
+ * Expanding the component set in future = only add to APPROVED_COMPONENTS in
+ * componentMap.ts. This panel updates automatically.
  */
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Search, X, GripVertical, Filter } from 'lucide-react'
-import { useDraggable } from '@dnd-kit/core'
-import { REGISTRY, CATEGORY_ORDER } from '@/src/playground/registry'
-import { SLOT_CATEGORY_HINTS, DEFAULT_SLOT_POSITIONS } from '@/src/stores/playgroundStore'
+import { ChevronDown, ChevronRight, X, ArrowLeftRight } from 'lucide-react'
+import { APPROVED_COMPONENTS, getCategory } from '@/src/playground/componentMap'
 import { usePlaygroundStore } from '@/src/stores/playgroundStore'
 
-// ── Draggable card ─────────────────────────────────────────────────────────────
+// ── Category display config ────────────────────────────────────────────────────
 
-function ComponentCard({ entry }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `browser:${entry.key}`,
-    data: { componentKey: entry.key, source: 'browser' },
-  })
-  const addItem             = usePlaygroundStore((s) => s.addItem)
-  const swapSlotComponent   = usePlaygroundStore((s) => s.swapSlotComponent)
-  const closeBrowser        = usePlaygroundStore((s) => s.closeBrowser)
-  const pendingSwapSlotId   = usePlaygroundStore((s) => s.pendingSwapSlotId)
-  const browserSlotFilter   = usePlaygroundStore((s) => s.browserSlotFilter)
+const CATEGORY_LABELS = {
+  backgrounds : 'Backgrounds',
+  text        : 'Text Effects',
+  cards       : 'Cards',
+  animations  : 'Animations',
+  supporters  : 'Supporters',
+}
+
+const CATEGORY_COLORS = {
+  backgrounds : '#5227FF',
+  text        : '#06B6D4',
+  cards       : '#F59E0B',
+  animations  : '#10B981',
+  supporters  : '#EC4899',
+}
+
+// ── Component card ────────────────────────────────────────────────────────────
+
+function ComponentCard({ name, category }) {
+  const replacingComponent = usePlaygroundStore((s) => s.replacingComponent)
+  const replaceComponent   = usePlaygroundStore((s) => s.replaceComponent)
+  const closeBrowser       = usePlaygroundStore((s) => s.closeBrowser)
+  const isSwapMode         = !!replacingComponent
 
   return (
     <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
       className={`
-        group relative flex items-start gap-3 p-3 rounded-lg border cursor-grab active:cursor-grabbing
-        bg-[#111113] border-[#3F3F46] hover:border-[#5227FF]/60 transition-all duration-150
-        ${isDragging ? 'opacity-40 scale-95' : ''}
+        group flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all duration-150
+        bg-[#111113] border-[#3F3F46]
+        hover:border-[#5227FF]/60 hover:bg-[#5227FF]/5
       `}
       onClick={() => {
-        const entry2 = REGISTRY.find(c => c.key === entry.key)
-        if (!entry2) return
-        const defaults = entry2.propSchema.reduce((acc, p) => {
-          acc[p.key] = p.default
-          return acc
-        }, {})
-        if (pendingSwapSlotId) {
-          // Swap mode — replace the pending slot's component
-          swapSlotComponent(pendingSwapSlotId, entry.key, defaults)
+        if (isSwapMode) {
+          replaceComponent(replacingComponent, name)
           closeBrowser()
-        } else {
-          // Normal add — create a free-floating item
-          addItem({
-            id: crypto.randomUUID(),
-            componentKey: entry.key,
-            props: defaults,
-            layoutHint: 'full',
-            sectionId: '',
-            slotType: browserSlotFilter ?? 'free',
-            slotPosition: DEFAULT_SLOT_POSITIONS[browserSlotFilter ?? 'free'] ?? {},
-            visible: true,
-          })
         }
       }}
     >
-      <GripVertical size={14} className="text-[#71717A] mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-[#FAFAFA] truncate">{entry.name}</p>
-        <p className="text-xs text-[#71717A] mt-0.5 line-clamp-2 leading-relaxed">{entry.description}</p>
-        <span className="inline-block mt-1.5 px-1.5 py-0.5 text-[10px] rounded bg-[#1A1A1F] text-[#A1A1AA] border border-[#3F3F46]">
-          {entry.category}
+      {/* Category dot */}
+      <div
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ background: CATEGORY_COLORS[category] }}
+      />
+
+      {/* Name */}
+      <span className="text-sm text-[#FAFAFA] flex-1 truncate font-medium">{name}</span>
+
+      {/* Action badge */}
+      {isSwapMode ? (
+        <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-[#5227FF]/20 text-[#B17BFF] border border-[#5227FF]/30 opacity-0 group-hover:opacity-100 transition-opacity">
+          <ArrowLeftRight size={9} />
+          Swap
         </span>
-      </div>
+      ) : (
+        <span
+          className="px-1.5 py-0.5 text-[10px] rounded bg-[#1A1A1F] text-[#71717A] border border-[#3F3F46] opacity-60"
+          style={{ color: CATEGORY_COLORS[category] }}
+        >
+          {CATEGORY_LABELS[category]}
+        </span>
+      )}
     </div>
   )
 }
 
-// ── Main panel ─────────────────────────────────────────────────────────────────
+// ── Collapsible section ───────────────────────────────────────────────────────
+
+function CategorySection({ categoryKey, replacingCategory }) {
+  const [isOpen, setIsOpen] = useState(true)
+  const components = APPROVED_COMPONENTS[categoryKey]
+  const label      = CATEGORY_LABELS[categoryKey]
+  const color      = CATEGORY_COLORS[categoryKey]
+
+  // In swap mode: hide sections that don't match the replacing component's category
+  const isSwapMode = !!replacingCategory
+  if (isSwapMode && replacingCategory !== categoryKey) return null
+
+  return (
+    <div className="border-b border-[#1F1F23] last:border-0">
+      {/* Section header */}
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-[#0D0D0F] hover:bg-[#111113] transition-colors"
+      >
+        <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+        <span className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider flex-1 text-left">
+          {label}
+        </span>
+        <span className="text-[10px] text-[#3F3F46] tabular-nums">{components.length}</span>
+        {isOpen
+          ? <ChevronDown size={10} className="text-[#52525B]" />
+          : <ChevronRight size={10} className="text-[#52525B]" />
+        }
+      </button>
+
+      {/* Component list */}
+      {isOpen && (
+        <div className="px-2 pb-2 pt-1 space-y-1.5">
+          {components.map((name) => (
+            <ComponentCard key={name} name={name} category={categoryKey} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main panel ────────────────────────────────────────────────────────────────
 
 export default function ComponentBrowser() {
-  const closeBrowser      = usePlaygroundStore((s) => s.closeBrowser)
-  const browserSlotFilter = usePlaygroundStore((s) => s.browserSlotFilter)
-  const pendingSwapSlotId = usePlaygroundStore((s) => s.pendingSwapSlotId)
-  const [query, setQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState('all')
+  const closeBrowser       = usePlaygroundStore((s) => s.closeBrowser)
+  const replacingComponent = usePlaygroundStore((s) => s.replacingComponent)
 
-  const categories = ['all', ...CATEGORY_ORDER]
+  // Determine which category is being swapped (filters visible sections)
+  const replacingCategory = replacingComponent ? getCategory(replacingComponent) : null
 
-  // Allowed categories when slot filter active
-  const allowedCats = browserSlotFilter ? (SLOT_CATEGORY_HINTS[browserSlotFilter] ?? null) : null
+  const title = replacingComponent
+    ? `Swap ${replacingComponent}`
+    : 'Browse Components'
 
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim()
-    return REGISTRY.filter((c) => {
-      // Slot filter — only show compatible categories
-      if (allowedCats && !allowedCats.includes(c.category)) return false
-      const matchCat = activeCategory === 'all' || c.category === activeCategory
-      if (!matchCat) return false
-      if (!q) return true
-      return (
-        c.name.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q) ||
-        c.tags.some((t) => t.includes(q))
-      )
-    })
-  }, [query, activeCategory, allowedCats])
+  const subtitle = replacingComponent
+    ? replacingCategory
+      ? `Showing ${CATEGORY_LABELS[replacingCategory]} only`
+      : 'All categories'
+    : `${Object.values(APPROVED_COMPONENTS).flat().length} components`
 
   return (
     <motion.div
@@ -110,75 +154,32 @@ export default function ComponentBrowser() {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: -300, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="flex flex-col h-full w-72 bg-[#0E0E10] border-r border-[#3F3F46] overflow-hidden"
+      className="flex flex-col h-full w-64 bg-[#0E0E10] border-r border-[#3F3F46] overflow-hidden flex-shrink-0"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#3F3F46]">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#FAFAFA]">
-            {pendingSwapSlotId ? 'Swap Component' : 'Components'}
-          </span>
-          {browserSlotFilter && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-[#5227FF]/20 text-[#B17BFF] border border-[#5227FF]/40">
-              <Filter size={9} />
-              {browserSlotFilter}
-            </span>
-          )}
+        <div>
+          <p className="text-sm font-semibold text-[#FAFAFA]">{title}</p>
+          <p className="text-[10px] text-[#52525B] mt-0.5">{subtitle}</p>
         </div>
         <button
           onClick={closeBrowser}
-          className="text-[#71717A] hover:text-[#FAFAFA] transition-colors"
+          className="text-[#71717A] hover:text-[#FAFAFA] transition-colors p-1"
           aria-label="Close browser"
         >
           <X size={16} />
         </button>
       </div>
 
-      {/* Search */}
-      <div className="px-3 pt-3 pb-2">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[#111113] border border-[#3F3F46] rounded-lg">
-          <Search size={13} className="text-[#71717A] flex-shrink-0" />
-          <input
-            className="flex-1 bg-transparent text-sm text-[#FAFAFA] placeholder-[#52525B] outline-none"
-            placeholder="Search components…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {query && (
-            <button onClick={() => setQuery('')} className="text-[#71717A] hover:text-[#FAFAFA]">
-              <X size={12} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Category chips */}
-      <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-        {categories.map((cat) => (
-          <button
+      {/* Sections */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3F3F46]">
+        {(Object.keys(APPROVED_COMPONENTS) ).map((cat) => (
+          <CategorySection
             key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`px-2.5 py-1 text-xs rounded-full border transition-all duration-150 ${
-              activeCategory === cat
-                ? 'bg-[#5227FF] border-[#5227FF] text-white'
-                : 'bg-transparent border-[#3F3F46] text-[#A1A1AA] hover:border-[#5227FF]/60'
-            }`}
-          >
-            {cat === 'all' ? 'All' : cat}
-          </button>
+            categoryKey={cat}
+            replacingCategory={replacingCategory}
+          />
         ))}
-      </div>
-
-      {/* Component list */}
-      <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2 scrollbar-thin scrollbar-thumb-[#3F3F46]">
-        <p className="text-xs text-[#52525B] pb-1">
-          {filtered.length} component{filtered.length !== 1 ? 's' : ''} · click to add
-        </p>
-        {filtered.length === 0 ? (
-          <p className="text-xs text-[#52525B] text-center pt-8">No results for "{query}"</p>
-        ) : (
-          filtered.map((c) => <ComponentCard key={c.key} entry={c} />)
-        )}
       </div>
     </motion.div>
   )

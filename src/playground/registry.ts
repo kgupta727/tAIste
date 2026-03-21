@@ -718,18 +718,6 @@ export const REGISTRY: ComponentEntry[] = [
     ],
   },
   {
-    key: 'magic-bento',
-    name: 'Magic Bento',
-    category: 'Components',
-    description: 'Bento grid with magnetic hovering effects',
-    tags: ['saas', 'portfolio', 'modern', 'bold', 'interactive'],
-    brandDNAMapping: { accentColor: 'borderColor', primaryColor: 'textColor' },
-    propSchema: [
-      { key: 'textColor', label: 'Text Color', type: 'color', default: '#fff', featured: true },
-      { key: 'borderColor', label: 'Border', type: 'color', default: '#333', featured: true },
-    ],
-  },
-  {
     key: 'infinite-menu',
     name: 'Infinite Menu',
     category: 'Components',

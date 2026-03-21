@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/src/lib/supabase/server'
 import { REGISTRY, REGISTRY_MAP } from '@/src/playground/registry'
-import type { LayoutHint } from '@/src/stores/playgroundStore'
+type LayoutHint = 'full' | 'half'
 
 // Build a compact catalog description to include in the prompt
 const CATALOG_SUMMARY = REGISTRY.map(

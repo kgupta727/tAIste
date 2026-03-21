@@ -1,105 +1,30 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { parseUsedComponents, BACKGROUND_COMPONENTS } from '@/src/playground/componentMap'
 
-export type LayoutHint = 'full' | 'half'
+// ── Generated page model ───────────────────────────────────────────────────────
 
-// ── Slot / section model ───────────────────────────────────────────────────────
-
-/**
- * SlotType describes what role a canvas item plays in the layout.
- * 'background' items always fill their section absolutely (z:0).
- * All others are positioned relative to their section using slotPosition.
- */
-export type SlotType =
-  | 'background'
-  | 'hero-headline'
-  | 'hero-sub'
-  | 'nav'
-  | 'cta'
-  | 'card-grid'
-  | 'logo-strip'
-  | 'feature-text'
-  | 'counter-row'
-  | 'gallery'
-  | 'hero-accent'   // inline accent below hero CTA buttons
-  | 'free'          // manually added — no fixed slot position
-
-/** CSS position values for a slot within its section */
-export interface SlotPosition {
-  top?: string
-  bottom?: string
-  left?: string
-  right?: string
-  width?: string
-  transform?: string
-  textAlign?: 'left' | 'center' | 'right'
+export interface ContentJSON {
+  companyName: string
+  heroHeadline: string
+  heroSubtitle: string
+  ctaPrimary: string
+  ctaSecondary: string
+  eyebrow: string
+  features: Array<{ icon: string; title: string; desc: string }>
+  stats: Array<{ value: number; suffix: string; label: string }>
+  logoLoop: string
+  closingHeadline?: string
+  closingSubtitle?: string
 }
 
-/** Section definition — one viewport-height block in the page */
-export interface CanvasSection {
-  id: string
-  templateSlotId: string | null   // which template slot this originated from (null = custom)
-  label: string                   // display name e.g. "Section 1"
-  heightVh: number                // section height in vh units
-  order: number                   // determines scroll position
-  // Scaffold content populated by fill-template AI from brand DNA
-  brandName?: string              // shown in the nav bar
-  subtitle?: string               // plain HTML subtitle paragraph below headline
-  ctaPrimary?: string             // primary CTA button text
-  ctaSecondary?: string           // secondary CTA button text
-  // Brand identity — extracted from user's Brand DNA by fill-template API
-  brandPrimary?: string           // dominant primary color hex e.g. "#1A1A2E"
-  brandAccent?: string            // accent color hex e.g. "#E94560" — used for CTAs, highlights
-  brandBg?: string                // page background hex e.g. "#09090B"
-  brandFontHeading?: string       // heading font family e.g. "Playfair Display"
-  brandFontBody?: string          // body font family e.g. "Inter"
-}
-
-export interface CanvasItem {
-  id: string
-  componentKey: string
-  props: Record<string, unknown>
-  order: number
-  layoutHint: LayoutHint          // kept for export compat
-  // slot fields
-  sectionId: string               // which section this item belongs to
-  slotType: SlotType
-  slotPosition: SlotPosition      // CSS absolute position within the section
-  visible: boolean
-}
-
-// ── Default slot positions (used by templates + AI fill) ──────────────────────
-
-export const DEFAULT_SLOT_POSITIONS: Record<SlotType, SlotPosition> = {
-  'background'    : { top: '0', left: '0', width: '100%' },
-  'hero-headline' : { bottom: '18%', left: '7%', width: '70%', textAlign: 'left' },
-  'hero-sub'      : { bottom: '11%', left: '7%', width: '60%', textAlign: 'left' },
-  'nav'           : { top: '3%', left: '0', width: '100%' },
-  'cta'           : { bottom: '6%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' },
-  'card-grid'     : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%' },
-  'logo-strip'    : { bottom: '4%', left: '0', width: '100%' },
-  'feature-text'  : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', textAlign: 'center' },
-  'counter-row'   : { bottom: '8%', left: '50%', transform: 'translateX(-50%)', width: '80%' },
-  'gallery'       : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '95%' },
-  'hero-accent'   : { bottom: '12%', left: '50%', transform: 'translateX(-50%)', width: '60%' },
-  'free'          : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', textAlign: 'center' },
-}
-
-// ── Component categories that are compatible with each slot type ──────────────
-
-export const SLOT_CATEGORY_HINTS: Record<SlotType, string[]> = {
-  'background'    : ['Backgrounds'],
-  'hero-headline' : ['TextAnimations'],
-  'hero-sub'      : ['TextAnimations'],
-  'nav'           : ['Components', 'Animations'],
-  'cta'           : ['Components', 'Animations'],
-  'card-grid'     : ['Components'],
-  'logo-strip'    : ['Animations', 'Components'],
-  'feature-text'  : ['TextAnimations'],
-  'counter-row'   : ['Components', 'TextAnimations'],
-  'gallery'       : ['Components'],
-  'hero-accent'   : ['Animations', 'Components'],
-  'free'          : ['Backgrounds', 'TextAnimations', 'Animations', 'Components'],
+export interface GeneratedPage {
+  jsx: string
+  backgroundComponent: string   // rendered at root level, never inside JSX
+  content: ContentJSON
+  heroImageUrl: string
+  usedComponents: string[]      // content components only — no backgrounds
+  brandDnaName?: string
 }
 
 // ── Snapshot model ────────────────────────────────────────────────────────────
@@ -109,60 +34,45 @@ export interface CanvasSnapshot {
   label: string
   templateId: string | null
   createdAt: string
-  items: CanvasItem[]
-  sections: CanvasSection[]
+  items: unknown[]
+  sections: unknown[]
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 interface PlaygroundState {
-  // canvas
-  canvasItems: CanvasItem[]
-  canvasSections: CanvasSection[]
-  selectedItemId: string | null
-  activeTemplateId: string | null
-  // ui state
+  generatedPage: GeneratedPage | null
+  isGenerating: boolean
+  generateError: string | null
+  generateStep: string | null
+  isSwapping: boolean
+
   isBrowserOpen: boolean
-  browserSlotFilter: SlotType | null  // when opened from a slot swap button
-  pendingSwapSlotId: string | null    // which slot item the browser is swapping into
-  isRecommending: boolean
-  isFilling: boolean                  // AI is filling template slots
+  replacingComponent: string | null
+
   isDirty: boolean
   lastSaved: Date | null
-  // snapshots
+
   snapshots: CanvasSnapshot[]
   snapshotsLoading: boolean
 
-  // canvas actions
-  addItem: (item: Omit<CanvasItem, 'order'>) => void
-  removeItem: (id: string) => void
-  duplicateItem: (id: string) => void
-  updateItemProps: (id: string, props: Record<string, unknown>) => void
-  reorderItems: (activeId: string, overId: string) => void
-  setLayoutHint: (id: string, hint: LayoutHint) => void
-  setCanvasItems: (items: CanvasItem[]) => void
-  setCanvasSections: (sections: CanvasSection[]) => void
-  toggleVisible: (id: string) => void
-  swapSlotComponent: (slotItemId: string, newComponentKey: string, newProps: Record<string, unknown>) => void
+  // ── Actions ─────────────────────────────────────────────────────────────────
 
-  // template
-  setActiveTemplate: (id: string | null) => void
-  applyTemplateFill: (fills: { slotId: string; componentKey: string; props: Record<string, unknown> }[]) => void
+  setGeneratedPage: (page: GeneratedPage) => void
+  setIsGenerating: (v: boolean) => void
+  setGenerateError: (e: string | null) => void
+  setGenerateStep: (s: string | null) => void
 
-  // selection
-  selectItem: (id: string | null) => void
+  replaceComponent: (oldName: string, newName: string) => Promise<void>
 
-  // ui
-  openBrowser: (slotFilter?: SlotType | null, pendingSwapSlotId?: string | null) => void
+  openBrowser: (replacingComponent?: string | null) => void
   closeBrowser: () => void
-  setIsRecommending: (v: boolean) => void
-  setIsFilling: (v: boolean) => void
-  setLastSaved: (d: Date) => void
-  setIsDirty: (v: boolean) => void
 
-  // snapshots
+  setIsDirty: (v: boolean) => void
+  setLastSaved: (d: Date) => void
+
   fetchSnapshots: () => Promise<void>
-  saveSnapshot: (label?: string, templateId?: string) => Promise<void>
+  saveSnapshot: (label?: string) => Promise<void>
   restoreSnapshot: (snapshot: CanvasSnapshot) => void
   deleteSnapshot: (id: string) => Promise<void>
 }
@@ -170,133 +80,72 @@ interface PlaygroundState {
 export const usePlaygroundStore = create<PlaygroundState>()(
   devtools(
     (set, get) => ({
-      canvasItems: [],
-      canvasSections: [],
-      selectedItemId: null,
-      activeTemplateId: null,
-      isBrowserOpen: false,
-      browserSlotFilter: null,
-      pendingSwapSlotId: null,
-      isRecommending: false,
-      isFilling: false,
-      isDirty: false,
-      lastSaved: null,
-      snapshots: [],
-      snapshotsLoading: false,
+      generatedPage    : null,
+      isGenerating     : false,
+      generateError    : null,
+      generateStep     : null,
+      isSwapping       : false,
+      isBrowserOpen    : false,
+      replacingComponent: null,
+      isDirty          : false,
+      lastSaved        : null,
+      snapshots        : [],
+      snapshotsLoading : false,
 
-      addItem: (item) =>
-        set((s) => {
-          const order = s.canvasItems.length
-          return {
-            canvasItems: [...s.canvasItems, { ...item, order }],
-            selectedItemId: item.id,
+      setGeneratedPage: (page) => set({ generatedPage: page, isDirty: true }),
+      setIsGenerating:  (v)    => set({ isGenerating: v }),
+      setGenerateError: (e)    => set({ generateError: e }),
+      setGenerateStep:  (s)    => set({ generateStep: s }),
+
+      replaceComponent: async (oldName, newName) => {
+        const page = get().generatedPage
+        if (!page) return
+
+        // Background swap: just update the field, no JSX manipulation, no API call
+        if (BACKGROUND_COMPONENTS.has(oldName)) {
+          set({
+            generatedPage: { ...page, backgroundComponent: newName },
             isDirty: true,
-          }
-        }),
+          })
+          return
+        }
 
-      removeItem: (id) =>
-        set((s) => ({
-          canvasItems: s.canvasItems
-            .filter((i) => i.id !== id)
-            .map((i, idx) => ({ ...i, order: idx })),
-          selectedItemId: s.selectedItemId === id ? null : s.selectedItemId,
-          isDirty: true,
-        })),
+        // Content swap: targeted GPT-4o-mini regeneration of the single component
+        set({ isSwapping: true })
+        try {
+          const res = await fetch('/api/playground/swap', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify({
+              currentComponent: oldName,
+              newComponent    : newName,
+              pageJsx         : page.jsx,
+              content         : page.content,
+            }),
+          })
+          const json = await res.json()
+          if (!res.ok) return
 
-      duplicateItem: (id) =>
-        set((s) => {
-          const src = s.canvasItems.find((i) => i.id === id)
-          if (!src) return s
-          const newItem: CanvasItem = {
-            ...src,
-            id: crypto.randomUUID(),
-            order: s.canvasItems.length,
-            slotType: 'free',
-          }
-          return {
-            canvasItems: [...s.canvasItems, newItem],
-            selectedItemId: newItem.id,
+          const newJsx  = json.jsx as string
+          const newUsed = (json.usedComponents as string[]) ?? parseUsedComponents(newJsx)
+          set({
+            generatedPage: { ...page, jsx: newJsx, usedComponents: newUsed },
             isDirty: true,
-          }
-        }),
+          })
+        } finally {
+          set({ isSwapping: false })
+        }
+      },
 
-      updateItemProps: (id, props) =>
-        set((s) => ({
-          canvasItems: s.canvasItems.map((i) =>
-            i.id === id ? { ...i, props: { ...i.props, ...props } } : i
-          ),
-          isDirty: true,
-        })),
+      openBrowser: (replacingComponent = null) =>
+        set({ isBrowserOpen: true, replacingComponent }),
+      closeBrowser: () =>
+        set({ isBrowserOpen: false, replacingComponent: null }),
 
-      reorderItems: (activeId, overId) =>
-        set((s) => {
-          const items = [...s.canvasItems]
-          const from = items.findIndex((i) => i.id === activeId)
-          const to = items.findIndex((i) => i.id === overId)
-          if (from === -1 || to === -1) return s
-          const [moved] = items.splice(from, 1)
-          items.splice(to, 0, moved)
-          return {
-            canvasItems: items.map((i, idx) => ({ ...i, order: idx })),
-            isDirty: true,
-          }
-        }),
-
-      setLayoutHint: (id, hint) =>
-        set((s) => ({
-          canvasItems: s.canvasItems.map((i) =>
-            i.id === id ? { ...i, layoutHint: hint } : i
-          ),
-          isDirty: true,
-        })),
-
-      setCanvasItems: (items) =>
-        set({ canvasItems: items, isDirty: false }),
-
-      setCanvasSections: (sections) =>
-        set({ canvasSections: sections, isDirty: false }),
-
-      toggleVisible: (id) =>
-        set((s) => ({
-          canvasItems: s.canvasItems.map((i) =>
-            i.id === id ? { ...i, visible: !i.visible } : i
-          ),
-          isDirty: true,
-        })),
-
-      swapSlotComponent: (slotItemId, newComponentKey, newProps) =>
-        set((s) => ({
-          canvasItems: s.canvasItems.map((i) =>
-            i.id === slotItemId
-              ? { ...i, componentKey: newComponentKey, props: newProps }
-              : i
-          ),
-          isDirty: true,
-        })),
-
-      setActiveTemplate: (id) => set({ activeTemplateId: id }),
-
-      applyTemplateFill: (fills) =>
-        set((s) => {
-          const updated = [...s.canvasItems]
-          for (const fill of fills) {
-            const idx = updated.findIndex((i) => i.id === fill.slotId)
-            if (idx !== -1) {
-              updated[idx] = { ...updated[idx], componentKey: fill.componentKey, props: fill.props }
-            }
-          }
-          return { canvasItems: updated, isDirty: true }
-        }),
-
-      selectItem: (id) => set({ selectedItemId: id }),
-
-      openBrowser: (slotFilter = null, pendingSwapSlotId = null) =>
-        set({ isBrowserOpen: true, browserSlotFilter: slotFilter, pendingSwapSlotId }),
-      closeBrowser: () => set({ isBrowserOpen: false, browserSlotFilter: null, pendingSwapSlotId: null }),
-      setIsRecommending: (v) => set({ isRecommending: v }),
-      setIsFilling: (v) => set({ isFilling: v }),
+      setIsDirty:   (v) => set({ isDirty: v }),
       setLastSaved: (d) => set({ lastSaved: d, isDirty: false }),
-      setIsDirty: (v) => set({ isDirty: v }),
+
+      // ── Snapshots ─────────────────────────────────────────────────────────────
 
       fetchSnapshots: async () => {
         set({ snapshotsLoading: true })
@@ -304,15 +153,18 @@ export const usePlaygroundStore = create<PlaygroundState>()(
           const res = await fetch('/api/playground/snapshots')
           if (!res.ok) return
           const json = await res.json()
-          const rows: Array<{ id: string; label: string; template_id: string | null; created_at: string; items: CanvasItem[]; sections: CanvasSection[] }> = json.snapshots ?? []
+          const rows: Array<{
+            id: string; label: string; template_id: string | null
+            created_at: string; items: unknown[]; sections: unknown[]
+          }> = json.snapshots ?? []
           set({
             snapshots: rows.map((r) => ({
-              id: r.id,
-              label: r.label,
+              id        : r.id,
+              label     : r.label,
               templateId: r.template_id,
-              createdAt: r.created_at,
-              items: r.items,
-              sections: r.sections,
+              createdAt : r.created_at,
+              items     : r.items,
+              sections  : r.sections,
             })),
           })
         } finally {
@@ -320,18 +172,19 @@ export const usePlaygroundStore = create<PlaygroundState>()(
         }
       },
 
-      saveSnapshot: async (label, templateId) => {
-        const { canvasItems, canvasSections } = get()
-        if (canvasItems.length === 0) return
+      saveSnapshot: async (label) => {
+        const { generatedPage } = get()
+        if (!generatedPage) return
+        const payload = {
+          label    : label ?? `Snapshot ${new Date().toLocaleTimeString()}`,
+          templateId: null,
+          items    : [{ ...generatedPage }],
+          sections : [],
+        }
         const res = await fetch('/api/playground/snapshots', {
           method : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body   : JSON.stringify({
-            label     : label ?? `Snapshot ${new Date().toLocaleTimeString()}`,
-            templateId: templateId ?? null,
-            items     : canvasItems,
-            sections  : canvasSections,
-          }),
+          body   : JSON.stringify(payload),
         })
         if (!res.ok) return
         const json = await res.json()
@@ -340,12 +193,12 @@ export const usePlaygroundStore = create<PlaygroundState>()(
           set((s) => ({
             snapshots: [
               {
-                id: r.id,
-                label: r.label,
+                id        : r.id,
+                label     : r.label,
                 templateId: r.template_id ?? null,
-                createdAt: r.created_at,
-                items: canvasItems,
-                sections: canvasSections,
+                createdAt : r.created_at,
+                items     : [{ ...generatedPage }],
+                sections  : [],
               },
               ...s.snapshots,
             ].slice(0, 20),
@@ -354,11 +207,14 @@ export const usePlaygroundStore = create<PlaygroundState>()(
       },
 
       restoreSnapshot: (snapshot) => {
+        const packed = snapshot.items?.[0] as GeneratedPage | undefined
+        if (!packed?.jsx) return
         set({
-          canvasItems    : snapshot.items,
-          canvasSections : snapshot.sections,
-          selectedItemId : null,
-          isDirty        : true,
+          generatedPage: {
+            ...packed,
+            backgroundComponent: packed.backgroundComponent ?? 'Particles',
+          },
+          isDirty: true,
         })
       },
 
